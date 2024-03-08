@@ -1,0 +1,6 @@
+{
+  "name": "@type-linq/sql-tree",
+  "main": "dist/index.js",
+  "author": "Calvin Mann <calvinmann@gmail.com>",
+  "license": "MIT"
+}
