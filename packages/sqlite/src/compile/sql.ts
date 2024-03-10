@@ -1,5 +1,4 @@
 import objectHash from 'object-hash';
-import { SOURCE } from '../../../core/src/constant';
 import { Expression, ExpressionTypeKey, Operator, Serializable } from '../../../core/src/type';
 
 export type SqlFragment = {
@@ -7,11 +6,13 @@ export type SqlFragment = {
     variables: Serializable[];
 }
 
+export type Sources = Record<string | symbol, string>;
+
 export function encodeIdentifier(identifier: string) {
     return `[${identifier.replace(/\[/g, `[[`)}]`;
 }
 
-export function compile(expression: Expression<ExpressionTypeKey>, source: string, globals: Map<string, string>): SqlFragment {
+export function compile(expression: Expression<ExpressionTypeKey>, sources: Sources, globals: Map<string, string>): SqlFragment {
     switch (expression.type) {
         case `BinaryExpression`:
         case `LogicalExpression`:
@@ -103,13 +104,12 @@ export function compile(expression: Expression<ExpressionTypeKey>, source: strin
     }
 
     function processIdentifier(expression: Expression<`Identifier`>) {
+        if (sources[expression.name]) {
+            return { sql: encodeIdentifier(sources[expression.name]), variables: [] };
+        }
+
         if (typeof expression.name === `symbol`) {
-            switch (expression.name) {
-                case SOURCE:
-                    return { sql: encodeIdentifier(source), variables: [] };
-                default:
-                    throw new Error(`Unknown symbol "${String(expression.name)}" received`);
-            }
+            throw new Error(`Encountered unexpected symbol identifier "${String(expression.name)}"`);
         }
 
         const global = globals.get(objectHash([expression.name]));
@@ -134,8 +134,8 @@ export function compile(expression: Expression<ExpressionTypeKey>, source: strin
             return { sql: global, variables: [] };
         }
 
-        const { sql: object, variables: objectVariables } = compile(expression.object, source, globals);
-        const { sql: prop, variables: propVariables } = compile(expression.property, source, globals);
+        const { sql: object, variables: objectVariables } = compile(expression.object, sources, globals);
+        const { sql: prop, variables: propVariables } = compile(expression.property, sources, globals);
 
         const sql = `${object}.${prop}`;
         return { sql, variables: [...objectVariables, ...propVariables] };
@@ -176,9 +176,9 @@ export function compile(expression: Expression<ExpressionTypeKey>, source: strin
     }
 
     function processConditional(expression: Expression<`ConditionalExpression`>) {
-        const test = compile(expression.test, source, globals);
-        const consequent = compile(expression.consequent, source, globals);
-        const alternate = compile(expression.alternate, source, globals);
+        const test = compile(expression.test, sources, globals);
+        const consequent = compile(expression.consequent, sources, globals);
+        const alternate = compile(expression.alternate, sources, globals);
 
         return {
             sql: `CASE ${test.sql} WHEN 1 THEN ${consequent.sql} ELSE ${alternate.sql} END`,
@@ -195,13 +195,13 @@ export function compile(expression: Expression<ExpressionTypeKey>, source: strin
             throw new Error(`Unary operator "${expression.operator}" not supported`);
         }
 
-        const { sql: argument, variables } = compile(expression.argument, source, globals);
+        const { sql: argument, variables } = compile(expression.argument, sources, globals);
         return { sql: `NOT (${argument})`, variables };
     }
 
     function processLeftRightExpression(expression: Expression<`BinaryExpression` | `LogicalExpression` | `AssignmentExpression`>): SqlFragment {
-        const { sql: left, variables: leftVariables } = compile(expression.left, source, globals);
-        const { sql: right, variables: rightVariables } = compile(expression.right, source, globals);
+        const { sql: left, variables: leftVariables } = compile(expression.left, sources, globals);
+        const { sql: right, variables: rightVariables } = compile(expression.right, sources, globals);
 
         const sql = generateBinarySql(left, expression.operator, right);
         const variables = [...leftVariables, ...rightVariables];
@@ -218,7 +218,7 @@ export function compile(expression: Expression<ExpressionTypeKey>, source: strin
                 if (property.type !== `Property`) {
                     throw new Error(`Expected "Property" in ObjectExpression properties`);
                 }
-                const { sql, variables } = compile(property.value, source, globals);
+                const { sql, variables } = compile(property.value, sources, globals);
 
                 if (property.key.type !== `Identifier` && property.key.type !== `Literal`) {
                     throw new Error(`Expected property key to be Identifier or Literal`);

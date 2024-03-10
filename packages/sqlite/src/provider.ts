@@ -20,21 +20,23 @@ import { QueryProvider } from '../../core/src/query-provider';
 import { Queryable } from '../../core/src/queryable';
 import { Serializable } from '../../core/src/type';
 import { prepare } from './compile';
+import { DatabaseSchema } from './schema';
 
 export class SqliteProvider extends QueryProvider {
     globals: Map<string[], string>;
     #dbFile: string;
     #db?: Database;
+    #schema: DatabaseSchema;
 
-    constructor(db: string, globals: Map<string[], string>) {
+    constructor(db: string, schema: DatabaseSchema, globals: Map<string[], string>) {
         super();
         this.globals = globals;
         this.#dbFile = db;
+        this.#schema = schema;
     }
 
     async *execute<TResult>(source: Queryable<TResult>): AsyncGenerator<TResult> {
         const { sql, variables } = this.compile(source);
-        console.log(sql, variables);
         const results = await this.run<TResult>(sql, variables);
         for (const result of results) {
             yield result;
@@ -42,7 +44,7 @@ export class SqliteProvider extends QueryProvider {
     }
 
     compile(source: Queryable<unknown>) {
-        const { sql, variables } = prepare(source.expression, this.globals);
+        const { sql, variables } = prepare(source.expression, this.#schema, this.globals);
         return { sql, variables };
     }
 

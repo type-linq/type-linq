@@ -1,4 +1,5 @@
 import { Expression, ExpressionTypeKey, Serializable } from '../../../core/src/type';
+import { DatabaseSchema } from '../schema';
 import { Context, context } from './context';
 import { SqlFragment, encodeIdentifier } from './sql';
 
@@ -6,8 +7,8 @@ type IdentifiedSqlFragment = SqlFragment & {
     identifier: string;
 }
 
-export function prepare(expression: Expression<ExpressionTypeKey>, globals: Map<string[], string>): SqlFragment {
-    let ctx = context(expression, globals);
+export function prepare(expression: Expression<ExpressionTypeKey>, schema: DatabaseSchema, globals: Map<string[], string>): SqlFragment {
+    let ctx = context(expression, schema, globals);
 
     if (!ctx) {
         throw new Error(`No context returned`);

@@ -3,7 +3,7 @@ import { Enumerable } from './enumerable';
 import { QueryProvider } from './query-provider';
 import { Expression, ExpressionType, ExpressionTypeKey, Serializable } from './type';
 import { mutateWalk, walk } from './walk';
-import { SELECT, SOURCE, WHERE } from './constant';
+import { SELECT, WHERE } from './constant';
 
 export type Predicate<TElement, TArgs> = (element: TElement, args: TArgs) => boolean;
 export type Map<TInput, TOutput> = (input: TInput) => TOutput;
@@ -11,13 +11,6 @@ export type Merge<TInput1, TInput2, TOutput> = (input1: TInput1, input2: TInput2
 
 // TODO: Need caching
 // TODO: AST Validation? Probably best left for the provider
-
-// TODO: Why... think a symbol would be a much better choice here....
-const VARS_NAME = `vars_e1fbe530aced`;
-const VARS_IDENTIFIER = {
-    type: ExpressionType.Identifier,
-    name: VARS_NAME,
-} as Expression<ExpressionType.Identifier>
 
 export class Queryable<TElement> extends Enumerable<TElement> {
     readonly provider: QueryProvider;
@@ -90,30 +83,48 @@ export class Queryable<TElement> extends Enumerable<TElement> {
     }
 
     /** Ensures the vars param is standard identifier, and any references to it are member expressions */
-    #normalizeParams(expression: Expression<`ArrowFunctionExpression`>, count: number) {
-        // No args means nothing to bind
-        if (expression.params.length < count + 1) {
+    #normalizeParams(expression: Expression<`ArrowFunctionExpression`>) {
+        for (let index = 0; index < expression.params.length; index++) {
+            if (expression.params[index].type === `ArrowFunctionExpression`) {
+                this.#normalizeParams(expression.params[index] as Expression<`ArrowFunctionExpression`>);
+            } else {
+                this.#normalizeParam(expression.params[index] as Expression<`ArrowFunctionExpression`>, index);
+            }
+        }
+    }
+
+    /** Ensures the specified param is standard identifier, and any references to it are member expressions */
+    #normalizeParam(expression: Expression<`ArrowFunctionExpression`>, index: number) {
+        // Nothing to normalize
+        if (expression.params.length < index + 1) {
             return;
         }
-        const varsParam = expression.params[count];
+        const param = expression.params[index];
 
-        // Args is in the form we want, nothing to notmalize
-        if (varsParam.type === `Identifier`) {
+        // Args is in the form we want, nothing to normalize
+        if (param.type === `Identifier`) {
             return;
         }
 
-        switch (varsParam.type) {
+        // We need a name for the param
+        const argName = `arg_${Math.random().toString(36).substring(2)}`;
+        const identifier = {
+            type: ExpressionType.Identifier,
+            name: argName,
+        } as Expression<ExpressionType.Identifier>;
+
+        switch (param.type) {
             case `ObjectPattern`:
             case `ArrayPattern`:
                 break;
             default:
                 // TODO: When we get an AssignmentPattern this will be triggered. Need to figure out default values
                 //  (Which probably means we need args in this function? Or perhaps we will just read the default values in another place?)
-                throw new Error(`Unable to process "${varsParam.type}" as vars param`);
+                throw new Error(`Unable to process "${param.type}" as vars param`);
         }
 
         const identifiers: Record<string, Expression<ExpressionType.Identifier | ExpressionType.Literal>[]> = {};
-        identifierPath(varsParam, [VARS_IDENTIFIER]);
+        identifierPath(param, [identifier]);
 
         // TODO: Make these external expressions
         const identifierExpressions: Record<string, Expression<ExpressionType.ExternalExpression>> = Object.fromEntries(
@@ -122,8 +133,8 @@ export class Queryable<TElement> extends Enumerable<TElement> {
             })
         );
 
-        // Replace vars param....
-        expression.params[1] = VARS_IDENTIFIER;
+        // Replace param        
+        expression.params[index] = identifier;
 
         // Replace identifiers with member expressions
         expression.body = mutateWalk(expression.body, (expression) => {
@@ -201,23 +212,22 @@ export class Queryable<TElement> extends Enumerable<TElement> {
                     value: { type: `Identifier`, name },
                 }))
             };
-        }   
+        }
 
         // First normalize the expressions
-        this.#normalizeParams(expression, count);
+        this.#normalizeParams(expression);
 
         const lastParam = expression.params.at(-1)!;
-        if (lastParam.type !== `Identifier` || lastParam.name !== VARS_NAME) {
+        if (expression.params.length < count || lastParam.type !== `Identifier`) {
             // No vars param (which should have been added during normalization
-            //  unless there were no args supplied) means nothing to do.
+            //  unless there were no args supplied) which means nothing to do.
             return;
         }
 
         // Remove the vars param
         expression.params.length = expression.params.length - 1;
 
-        const varsName = lastParam.name as string;
-
+        const varsName = lastParam.name;
         walk(expression.body, (exp) => {
             if (exp.type !== ExpressionType.ExternalExpression) {
                 return true;
@@ -226,7 +236,7 @@ export class Queryable<TElement> extends Enumerable<TElement> {
             exp = exp.expression;
 
             if (exp.type === ExpressionType.Identifier) {
-                if (exp.name === VARS_NAME) {
+                if (exp.name === varsName) {
                     const varValue = readArgValue(varsName, exp);
                     replace(varValue);
                 }
@@ -319,7 +329,7 @@ export class Queryable<TElement> extends Enumerable<TElement> {
 
         function isRootVars(expression: Expression<`Identifier` | `MemberExpression`>) {
             if (expression.type === ExpressionType.Identifier) {
-                return expression.name === VARS_NAME;
+                return expression.name === varsName;
             }
 
             if (expression.object.type !== ExpressionType.MemberExpression && expression.object.type !== ExpressionType.Identifier) {
@@ -329,7 +339,7 @@ export class Queryable<TElement> extends Enumerable<TElement> {
             return isRootVars(expression.object as Expression<ExpressionType.Identifier | ExpressionType.MemberExpression>);
         }
 
-        function readArgValue(varsName: string, expression: Expression<`Identifier` | `MemberExpression`>): Serializable {
+        function readArgValue(varsName: string | symbol, expression: Expression<`Identifier` | `MemberExpression`>): Serializable {
             const value = read(expression);
             validateValue(value);
             return value;
@@ -337,7 +347,7 @@ export class Queryable<TElement> extends Enumerable<TElement> {
             function read(expression: Expression<`Identifier` | `MemberExpression`>): Serializable {
                 if (expression.type === `Identifier`) {
                     if (expression.name !== varsName) {
-                        throw new Error(`Got identifier which is not "${varsName}"`);
+                        throw new Error(`Got identifier which is not "${String(varsName)}"`);
                     }
                     return args as Serializable;
                 }
@@ -414,9 +424,6 @@ export class Queryable<TElement> extends Enumerable<TElement> {
             this.#bindArgs(ast, 1, args);
         }
 
-        // Bind the special identifiers
-        this.#replaceParam(ast, 0, SOURCE);
-
         const whereExpression: Expression<`CallExpression`> = {
             type: `CallExpression`,
             callee: {
@@ -441,11 +448,6 @@ export class Queryable<TElement> extends Enumerable<TElement> {
         if (args !== undefined) {
             this.#bindArgs(ast, 1, args);
         }
-
-        // Bind the special identifiers
-        this.#replaceParam(ast, 0, SOURCE);
-
-        // TODO: Extract required joins
 
         const selectExpression: Expression<`CallExpression`> = {
             type: `CallExpression`,
