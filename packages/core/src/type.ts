@@ -448,3 +448,6 @@ type Primitive = number | bigint | string | boolean | undefined;
 export type Serializable = Primitive | {
     [name: string | number]: Serializable | Serializable[];
 };
+
+export type Predicate<TElement, TArgs> = (element: TElement, args: TArgs) => boolean;
+export type Map<TInput, TOutput> = (input: TInput) => TOutput;

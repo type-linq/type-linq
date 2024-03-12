@@ -1,0 +1,64 @@
+// join: <TInner, TKey, TResult>(
+    //     inner: Enumerable<TInner>,
+    //     outerExpression: Map<TElement, TKey>,
+    //     innerExpression: Map<TInner, TKey>,
+    //     map: Merge<TElement, TInner, TResult>,
+    // ) => TResult,
+
+    // aggregate
+    // all
+    // any
+    // append
+    // average
+    // chunk
+    // concat
+    // contains
+    // count
+    // defaultIfEmpty
+    // distinct
+    // distinctBy
+    // elementAt
+    // elementAtOrDefault
+    // except
+    // exceptBy
+    // first
+    // firstOrDefault
+    // groupBy
+    // groupJoin
+    // intersect
+    // intersectBy
+    // join
+    // last
+    // lastOrDefault
+    // longCount
+    // max
+    // maxBy
+    // min
+    // minBy
+    // order
+    // orderBy
+    // orderByDescending
+    // prepend
+    // revserse
+    // select
+    // selectMany
+    // sequenceEqual
+    // single
+    // singleOrDefault
+    // skip
+    // skipLast
+    // skipWhile
+    // sum
+    // take
+    // takeLast
+    // takeWhile
+    // thenBy
+    // thenByDescending
+    // union
+    // unionBy
+
+
+    // cast
+    // ofType
+    // asQueryable
+    // zip

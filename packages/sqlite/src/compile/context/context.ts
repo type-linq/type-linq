@@ -100,6 +100,13 @@ export class Context {
     }
 
     adjustSelect(expression: Expression<`ArrowFunctionExpression`>) {
+
+        // TODO:
+        //  1. Flatten out member expressions
+        //  2. Replace globals
+        //  3. ???
+
+
         this.#dirty = true;
         const sourceName = readName(expression.params[0]);
 
@@ -179,6 +186,7 @@ export class Context {
             // TODO: Don't we need the implicit joins on existing columns?
 
             if (type instanceof EntityType === false) {
+                // TODO: What should the expression be?
                 const expression: Expression<`MemberExpression`> = {
                     object: {
                         type: `Identifier`,
@@ -242,6 +250,62 @@ export class Context {
             // Every time we encounter a source entity type, we need to replace the expression
             //  with the table name...
 
+            function mutateWalk(this: Context, exp: Expression<ExpressionTypeKey>): { type: Type, expression: Expression<ExpressionTypeKey> } {
+                switch (exp.type) {
+                    case `Identifier`: {
+                        // TODO: Globals
+                        if (exp.name !== sourceName) {
+                            throw new Error(`Unknown identifier "${String(exp.name)}" received`);
+                        }
+                        return { type: this.type, expression: exp };
+                    }
+                    case `MemberExpression`: {
+                        // TODO: we must replace the object of the member expression with any
+                        //  source entity type table as we walk along (From the inner most member expression)
+
+                        const { type, expression } = mutateWalk.call(this, exp.object);
+
+                        // TODO: We need to handle things like length...
+                        if (type instanceof StringType) {
+                            throw new Error(`not implemented`);
+                        } else if (type instanceof BooleanType) {
+                            throw new Error(`not implemented`);
+                        } else if (type instanceof NumberType) {
+                            throw new Error(`not implemented`);
+                        }
+
+                        const name = readName(exp.property) as string;
+
+                        if (type.accessors[name] === undefined) {
+                            throw new Error(`Unable to find property "${name}" on type`);
+                        }
+
+                        const result = type.accessors[name].type;
+
+                        if (result instanceof SourceEntityType) {
+                            // Add the implicit joins
+                            const source = sourceEntity(type);
+                            if (source !== undefined) {
+                                implicitJoins[source.schema.name] = implicitJoins[source.schema.name] ?? [];
+                                implicitJoins[source.schema.name].push(result.schema.name);
+                            }
+
+                            return {
+                                type: result,
+                                expression: {
+                                    type: `Identifier`,
+                                    name: result.schema.name,
+                                },
+                            };
+                        }
+
+                        return { type: result, expression };
+                    }
+                    default:
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        throw new Error(`Unexpected expression type "${(exp as any).type}"`);
+                }
+            }
 
             function walk(this: Context, exp: Expression<ExpressionTypeKey>) {
                 switch (exp.type) {
@@ -253,6 +317,9 @@ export class Context {
                         return this.type;
                     }
                     case `MemberExpression`: {
+                        // TODO: we must replace the object of the member expression with any
+                        //  source entity type table as we walk along (From the inner most member expression)
+
                         const type = walk.call(this, exp.object) as Type;
                         const name = readName(exp.property) as string;
 
@@ -263,6 +330,15 @@ export class Context {
                         const result = type.accessors[name].type;
 
                         if (result instanceof SourceEntityType) {
+                            // Replace the root of the member expresson with
+                            //  the table the linked entity belongs to
+                            // TODO: No... we need to replace the whole member expression!
+                            exp.object = {
+                                type: `Identifier`,
+                                name: result.schema.name,
+                            };
+
+                            // Add the implicit joins
                             const source = sourceEntity(type);
                             if (source !== undefined) {
                                 implicitJoins[source.schema.name] = implicitJoins[source.schema.name] ?? [];

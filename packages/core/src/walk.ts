@@ -20,6 +20,22 @@ export function walk(expression: Expression<ExpressionTypeKey>, visit: (expressi
     }
 }
 
+export function walkLeaf(expression: Expression<ExpressionTypeKey>, visit: (expression: Expression<ExpressionTypeKey>) => void) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exp = expression as any;
+    const keys = expressionKeys[expression.type];
+    for (const key of keys) {
+        if (Array.isArray(exp[key])) {
+            for (const subExpression of exp[key]) {
+                walkLeaf(subExpression, visit);
+            }
+        } else {
+            walkLeaf(exp[key], visit);
+        }
+    }
+    visit(expression);
+}
+
 export function mutateWalk(expression: Expression<ExpressionTypeKey>, visit: (expression: Expression<ExpressionTypeKey>) => Expression<ExpressionTypeKey>) {
     const visited = visit(expression);
     if (visited !== expression) {
@@ -38,4 +54,15 @@ export function mutateWalk(expression: Expression<ExpressionTypeKey>, visit: (ex
     }
 
     return exp;
+}
+
+export function expressionRoot(expression: Expression<ExpressionTypeKey>): Expression<ExpressionTypeKey> {
+    switch (expression.type) {
+        case `MemberExpression`:
+            return expressionRoot(expression.object);
+        case `CallExpression`:
+            return expressionRoot(expression.callee);
+        default:
+            return expression;
+    }
 }
