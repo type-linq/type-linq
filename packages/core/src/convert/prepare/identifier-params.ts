@@ -6,7 +6,7 @@ import { mutateWalk } from '../../walk';
 /** Ensures the vars param is standard identifier, and any references to it are member expressions */
 export function ensureIdentifierParams(expression: Expression<`ArrowFunctionExpression`>) {
     for (let index = 0; index < expression.params.length; index++) {
-        ensureIdentifierParam(expression.params[index] as Expression<`ArrowFunctionExpression`>, index);
+        ensureIdentifierParam(expression, index);
     }
 }
 

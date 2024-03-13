@@ -31,7 +31,7 @@ export function bindVars(expression: Expression<`ArrowFunctionExpression`>, coun
     }
 
     // Remove the vars param
-    expression.params.length = expression.params.length - 1;
+    expression.params.length = count;
 
     const varsName = lastParam.name;
     walk(expression.body, (exp) => {

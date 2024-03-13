@@ -1,16 +1,15 @@
 import { convert } from '../convert/convert';
 import { readName } from '../convert/util';
 import { Queryable } from './queryable';
-import { LogicalExpression } from '../tree/binary';
-import { Expression } from '../tree/expression';
-import { Predicate } from '../type';
+import { BinaryExpression, LogicalExpression } from '../tree/binary';
+import { Expression, ExpressionType } from '../tree/expression';
+import { Predicate, Serializable } from '../type';
 import { parseFunction } from './parse';
 import { SourceExpression } from '../tree/source';
-import { SelectExpression } from '../tree/select';
-import { JoinExpression } from '../tree/join';
+import { SelectExpression, buildImplicitJoins } from '../tree/select';
 import { Globals } from '../convert/global';
 
-export function where<TElement, TArgs = unknown>(
+export function where<TElement, TArgs extends Serializable | undefined = undefined>(
     this: Queryable<TElement>,
     predicate: Predicate<TElement, TArgs>,
     args?: TArgs,
@@ -33,21 +32,22 @@ export function where<TElement, TArgs = unknown>(
     const globals: Globals = this.provider.globals;
 
     // The where expression. This is the first parmeter
-    const { expression, linkChains } = convert(
+    // TODO: Why are the identifiers coming out of here not fully qualified?
+    const { expression, linkMap } = convert(
         sources,
         ast.body,
         varsName,
         globals,
+        args,
     );
 
-    if (expression instanceof LogicalExpression === false) {
-        throw new Error(`Expected the where predicate to return a LogicalExpression`);
+    if (expression instanceof LogicalExpression === false && expression instanceof BinaryExpression === false) {
+        throw new Error(`Expected the where predicate to return a LogicalExpression or BinaryExpression. Got ${expression.constructor.name}`);
     }
-
-    const joins = buildChainJoins(linkChains);
 
     let select: SelectExpression;
     if (this.expression instanceof SourceExpression) {
+        const joins = buildImplicitJoins([], linkMap);
         select = new SelectExpression(
             this.expression.columns,
             this.expression,
@@ -55,22 +55,16 @@ export function where<TElement, TArgs = unknown>(
             joins
         );
     } else if (this.expression instanceof SelectExpression) {
+        const joins = buildImplicitJoins(this.expression.join, linkMap);
         const where = this.expression.where ?
             new LogicalExpression(this.expression.where, `&&`, expression) :
             expression;
-
-        const finalJoins = joins.filter(
-            (join) => hasMatchingJoin(this.expression as SelectExpression, join) === false
-        );
 
         select = new SelectExpression(
             this.expression.columns,
             this.expression.source,
             where,
-            [
-                ...this.expression.join,
-                ...finalJoins,
-            ]
+            joins,
         );
     } else {
         throw new Error(`Expected either a source expression or a select expression`);
@@ -80,17 +74,4 @@ export function where<TElement, TArgs = unknown>(
         this.provider,
         select,
     );
-
-    function buildChainJoins(linkChains: Record<string, SourceExpression[]>): JoinExpression[] {
-        return Object.entries(linkChains).map(([name, chain]) => {
-            throw new Error(`not implemented`);
-        });
-    }
-
-    function hasMatchingJoin(select: SelectExpression, join: JoinExpression) {
-        // for (const jn of select.join) {
-        //     throw new Error(`not implemented`);
-        // }
-        return false;
-    }
 }

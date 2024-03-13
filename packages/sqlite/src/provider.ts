@@ -25,6 +25,7 @@ import { Type } from '../../core/src/tree/type';
 import { Expression, ExpressionType } from '../../core/src/tree/expression';
 import { GlobalExpression } from '../../core/src/tree/global';
 import { CallExpression } from '../../core/src/tree/call';
+import { compile } from './compile';
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;
@@ -56,7 +57,7 @@ export class SqliteProvider extends QueryProvider {
     }
 
     compile(source: Queryable<unknown>) {
-        const { sql, variables } = prepare(source.expression, this.#schema, this.globals);
+        const { sql, variables } = compile(source.expression);
         return { sql, variables };
     }
 
@@ -97,11 +98,14 @@ export class SqliteProvider extends QueryProvider {
     }
 
     #mapIdentifier = (...path: string[]): GlobalExpression | undefined => {
-        throw new Error(`not implemented`);
+        console.log(`mapIdentifier`, path);
+        // throw new Error(`not implemented`);
+        return undefined;
     }
 
     #mapAccessor = (type: Type, object: Expression<ExpressionType>, name: string | symbol, args: Expression<ExpressionType>[]): GlobalExpression | CallExpression | undefined => {
-        throw new Error(`not implemented`);
+        console.log(`mapAccessor`, type, object, name, args);
+        return undefined;
     }
 }
 

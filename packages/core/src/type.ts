@@ -391,7 +391,8 @@ type ArrayType =
     `specifiers` |
     `properties` |
     `expressions` |
-    `declarations`;
+    `declarations` |
+    `quasis`;
 
 type Literal = {
     type: `Literal`;
@@ -439,6 +440,8 @@ export type Expression<TType extends ExpressionTypeKey> =
     ? ExpressionBase<TType> & { operator: Operator }
     : TType extends `Property`
     ? ExpressionBase<`Property`> & { computed: boolean, kind: `init`, method: boolean, shorthand: boolean }
+    : TType extends `TemplateElement`
+    ? ExpressionBase<`TemplateElement`> & { tail: boolean, value: { raw: string, cooked: string } }
     : ExpressionBase<TType>;
 
 // TODO: Would be nice to add some overrides where expressions are a subset...

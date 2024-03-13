@@ -1,9 +1,9 @@
 import { Expression, ExpressionType } from './expression';
 import { BooleanType, NumberType, Type } from './type';
 
-type EqualityOperator = `==` | `!=`;
-type ComparisonOperator = `<` | `>` | `<=` | `>=`;
-type MathOperator = `+` | `-` | `*` | `/` | `%`;
+export type EqualityOperator = `==` | `!=`;
+export type ComparisonOperator = `<` | `>` | `<=` | `>=`;
+export type MathOperator = `+` | `-` | `*` | `/` | `%`;
 
 export type LogicalOperator = `||` | `&&` | `??`;
 export type BinaryOperator = EqualityOperator | ComparisonOperator | MathOperator | LogicalOperator;

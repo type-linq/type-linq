@@ -1,6 +1,7 @@
-import { Prisma } from '@prisma/client';
 import { SqliteProvider } from './src/provider';
 import { SqliteQueryableSource } from './src/queryable';
+import { buildSources } from './src/sources';
+import { DatabaseSchema } from './src/schema';
 
 // TODO: Generate these types automatically
 
@@ -36,9 +37,10 @@ type Supplier = {
     Products: Product[];
 }
 
-const schema = {
+const schema: DatabaseSchema = {
     tables: {
         Products: {
+            name: `Products`,
             columns: {
                 ProductID: `INTEGER`,
                 ProductName: `TEXT`,
@@ -62,6 +64,7 @@ const schema = {
             }
         },
         Suppliers: {
+            name: `Suppliers`,
             columns: {
                 SupplierID: `INTEGER`,
                 CompanyName: `TEXT`,
@@ -173,19 +176,20 @@ const p: Products = undefined!;
 
 type Test = Debug<Products>;*/
 
+const sources = buildSources(schema);
+
 class ProductsQueryable extends SqliteQueryableSource<Product> {
     constructor() {
-        super(provider, `Products`)
+        super(provider, sources.Products)
     }
 }
 
 (async function run() {
-    Prisma.dmmf.datamodel.enums
-
     const products = new ProductsQueryable();
 
     const productId = 57;
     const recordLevel = 10;
+    const arg = `M`;
 
     const query1 = products;
 
@@ -194,6 +198,7 @@ class ProductsQueryable extends SqliteQueryableSource<Product> {
             productId: c.ProductID,
             name: c.ProductName
         }))
+        .where((c) => c.name > arg, { arg })
 
     for await (const product of query2) {
         console.dir(product);

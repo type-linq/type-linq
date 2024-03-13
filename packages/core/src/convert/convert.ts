@@ -2,10 +2,9 @@
 import { readName } from './util';
 import { ExpressionType, Expression as QueryExpression } from '../tree/expression';
 import { SourceExpression } from '../tree/source';
-import { Expression, ExpressionTypeKey, Operator } from '../type';
+import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type';
 import { walk } from '../walk';
 import { Globals, isGlobalIdentifier, mapGlobal, mapGlobalAccessor } from './global';
-import { memberExpressionRoot } from '../../../sqlite/src/compile/util';
 import { CallExpression } from '../tree/call';
 import { GlobalExpression } from '../tree/global';
 import { VariableExpression } from '../tree/variable';
@@ -13,6 +12,12 @@ import { UnaryExpression } from '../tree/unary';
 import { Literal } from '../tree/literal';
 import { BinaryExpression, BinaryOperator, LogicalExpression, LogicalOperator } from '../tree/binary';
 import { TernaryExpression } from '../tree/ternary';
+import { CaseBlock, CaseExpression } from '../tree/case';
+import { Column } from '../tree/column';
+import { JoinExpression } from '../tree/join';
+import { SelectExpression } from '../tree/select';
+import { asArray } from '../tree/util';
+import { UnionType } from '../tree/type';
 
 export type Sources = Record<string | symbol, QueryExpression<ExpressionType>>;
 
@@ -21,17 +26,21 @@ export function convert(
     expression: Expression<ExpressionTypeKey>,
     varsName?: string | symbol,
     globals?: Globals,
-    args?: unknown,
-): { expression: QueryExpression<ExpressionType>, linkChains: Record<string, SourceExpression[]> } {
-    const linkChains: Record<string, SourceExpression[]> = {};
+    args?: Serializable,
+): { expression: QueryExpression<ExpressionType>, linkMap: Map<SourceExpression, SourceExpression[]> } {
+    // TODO: We need some additional information here...
+    //  We need to figur out the way the 2 sources map together....
+    const linkMap = new Map<SourceExpression, SourceExpression[]>();
 
     return {
-        linkChains,
+        linkMap,
         expression: process(expression),
     }
 
     function process(expression: Expression<ExpressionTypeKey>): QueryExpression<ExpressionType> {
         switch (expression.type) {
+            case `ExternalExpression`:
+                return processExternal(expression);
             case `Identifier`:
                 return processIdentifier(expression);
             case `MemberExpression`:
@@ -58,6 +67,22 @@ export function convert(
             }
             case `Literal`:
                 return new Literal(expression.value);
+            case `TemplateLiteral`: {
+                // TODO
+                if (expression.expressions.length > 0) {
+                    throw new Error(`Template literals not fully supported`);
+                }
+
+                if (expression.quasis.length !== 1) {
+                    throw new Error(`Expected exactly one quasi`);
+                }
+
+                if (expression.quasis[0].type !== `TemplateElement`) {
+                    throw new Error(`Expected quasi to be a "TemplateElement". Got "${expression.quasis[0].type}"`);
+                }
+
+                return new Literal(expression.quasis[0].value.cooked);
+            }
             case `UnaryExpression`:
                 if (expression.operator !== `!`) {
                     throw new Error(`Unabry operator "${expression.operator}" not supported`);
@@ -159,6 +184,24 @@ export function convert(
         throw new Error(`No identifier "${String(expression.name)}" found (on sources or global)`);
     }
 
+    function processExternal(expression: Expression<`ExternalExpression`>) {
+        const path: string[] = [];
+        walk(expression.expression, (exp) => {
+            if (exp.type === `Identifier`) {
+                return false;
+            }
+            if (exp.type === `Literal`) {
+                return false;
+            }
+            if (exp.type === `MemberExpression`) {
+                const name = readName(exp.property);
+                path.push(name as string);
+            }
+            throw new Error(`Unexpected expression type "${exp.type}"`);
+        });
+        return new VariableExpression(path, args);
+    }
+
     function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression<ExpressionType> {
         if (expression.callee.type !== `MemberExpression`) {
             throw new Error(`Expected CallExpression to always act on a MemberExpression`);
@@ -177,22 +220,6 @@ export function convert(
     }
 
     function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression<ExpressionType> {
-        const expressionSource = memberExpressionRoot(expression);
-        if (expressionSource.type === `Identifier`&& expressionSource.name === varsName) {
-            const path: string[] = [];
-            walk(expression, (exp) => {
-                if (exp.type === `Identifier`) {
-                    return false;
-                }
-                if (exp.type === `MemberExpression`) {
-                    const name = readName(exp.property);
-                    path.push(name as string);
-                }
-                throw new Error(`Unexpected expression type "${expression.type}"`);
-            });
-            return new VariableExpression(path, args);
-        }
-
         const source = process(expression.object);
         const name = readName(expression.property);
 
@@ -217,37 +244,158 @@ export function convert(
             return exp;
         }
 
-        // TODO: Should we be handling Binary Logical and Ternary expressions here?
-        //  If so we need 
+        const sources = fetchSources(source);
+        const result = processAccess(source, name);
 
-        if (source instanceof SourceExpression === false) {
-            throw new Error(`Unexpected expression type. Expected SourceExpression got "${source.expressionType}"`);
-        }
-
-        if (Array.isArray(source.columns) === false) {
-            const exp = mapGlobalAccessor(source.columns, name, [], globals);
-            if (exp === undefined) {
-                throw new Error(`Unable to map MemberExpression to global`);
-            }
-            return exp;
-        }
-
-        // We have a SourceExpression
-        const sourceColumn = source.columns.find(
-            (column) => column.name === name
-        );
-
-        if (sourceColumn === undefined) {
-            throw new Error(`Unable to find column "${name}" on "${source.name}"`);
-        }
-
-        if (sourceColumn.expression instanceof SourceExpression) {
-            if (sourceColumn.expression.resource !== source.resource) {
-                linkChains[source.resource] = linkChains[source.resource] || [];
-                linkChains[source.resource].push(sourceColumn.expression);
+        if (result instanceof SourceExpression === true) {
+            for (const source of sources) {
+                if (result.name !== source.name) {
+                    if (linkMap.has(source)) {
+                        linkMap.get(source)!.push(result);
+                    } else {
+                        linkMap.set(source, [result]);
+                    }
+                }
             }
         }
 
-        return sourceColumn.expression;
+        return result;
     }
+
+    function processAccess(source: QueryExpression<ExpressionType>, name: string) {
+        if (source instanceof SourceExpression || source instanceof SelectExpression) {
+            const sourceColumn = asArray(source.columns).find(
+                (column) => column.name === name
+            );
+
+            if (sourceColumn) {
+                return sourceColumn.expression;
+            }
+        }
+
+        if(source.type instanceof UnionType) {
+            // TODO: Implament union types.
+            //  They will need to make sure the accessor is valid for all branches.
+            throw new Error(`Accessors onto union types are not currently supported`);
+        }
+
+        if (name in source.type === false) {
+            throw new Error(`Unable to find identifier "${name}" on source`);
+        }
+
+        const exp = mapGlobalAccessor(source, name, [], globals);
+        if (exp === undefined) {
+            throw new Error(`Unable to map MemberExpression to global ("${name}")`);
+        }
+        return exp;
+    }
+}
+
+function fetchSources(expression: QueryExpression<ExpressionType>): SourceExpression[] {
+    switch (expression.expressionType) {
+        case `BinaryExpression`: {
+            // TODO: Need to add brackets in the correct places
+            const binary = expression as BinaryExpression;
+            const sources = [
+                ...fetchSources(binary.left),
+                ...fetchSources(binary.right),
+            ];
+            return sources;
+        }
+        case `LogicalExpression`: {
+            const logical = expression as LogicalExpression;
+            const sources = [
+                ...fetchSources(logical.left),
+                ...fetchSources(logical.right),
+            ];
+            return sources;
+        }
+        case `VariableExpression`: {
+            return [];
+        }
+        case `CallExpression`: {
+            const call = expression as CallExpression;
+            const sources = [
+                ...fetchSources(call.callee),
+                ...call.arguments.map(fetchSources).flat(),
+            ];
+            return sources;
+        }
+        case `CaseBlock`: {
+            const block = expression as CaseBlock;
+            const sources = [
+                ...fetchSources(block.test),
+                ...fetchSources(block.consequent),
+            ];
+            return sources;
+        }
+        case  `CaseExpression`: {
+            const exp = expression as CaseExpression;
+            const sources = [
+                ...exp.when.map(fetchSources).flat(),
+                ...fetchSources(exp.alternate),
+            ];
+            return sources;
+        }
+        case `Column`: {
+            const column = expression as Column;
+            const sources = fetchSources(column.expression);
+            return sources;
+        }
+        case `GlobalExpression`:
+            return [];
+        case `Identifier`: 
+            return [];
+        case `JoinExpression`: {
+            const join = expression as JoinExpression;
+
+            const clauses = join.join.map(
+                (clause) => [...fetchSources(clause.left), ...fetchSources(clause.right)]
+            ).flat();
+
+            const sources = [
+                ...fetchSources(join.source),
+                ...clauses,
+            ];
+            return sources;
+        }
+        case `Literal`:
+            return [];
+        case `SelectExpression`: {
+            const exp = expression as SelectExpression;
+            const sources = [
+                ...asArray(exp.columns).map(
+                    (column) => fetchSources(column.expression)
+                ).flat(),
+                ...exp.join.map(fetchSources).flat(),
+                ...fetchSources(exp.source),
+            ];
+
+            if (exp.where) {
+                sources.push(...fetchSources(exp.where));
+            }
+
+            return sources;
+        }
+        case `SourceExpression`: {
+            const source = expression as SourceExpression;
+            return [source];
+        }
+        case `TernaryExpression`: {
+            const exp = expression as TernaryExpression;
+            const sources = [
+                ...fetchSources(exp.test),
+                ...fetchSources(exp.consequent),
+                ...fetchSources(exp.alternate),
+            ];
+            return sources;
+        }
+        case `UnaryExpression`: {
+            const unary = expression as UnaryExpression;
+            return fetchSources(unary.expression);
+        }
+        default:
+            throw new Error(`Unkown expression type "${expression.expressionType}" received`);
+    }
+
 }

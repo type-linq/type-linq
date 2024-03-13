@@ -1,11 +1,21 @@
-import { BinaryExpression, BinaryOperator, LogicalExpression, LogicalOperator } from '../../core/src/tree/binary';
+import {
+    BinaryExpression,
+    BinaryOperator,
+    LogicalExpression,
+    LogicalOperator,
+    EqualityOperator,
+} from '../../core/src/tree/binary';
 import { CallExpression } from '../../core/src/tree/call';
+import { CaseBlock, CaseExpression } from '../../core/src/tree/case';
 import { Column } from '../../core/src/tree/column';
 import { Expression, ExpressionType } from '../../core/src/tree/expression';
 import { GlobalExpression } from '../../core/src/tree/global';
 import { Identifier } from '../../core/src/tree/identifier';
+import { JoinClause, JoinExpression } from '../../core/src/tree/join';
 import { Literal } from '../../core/src/tree/literal';
+import { SelectExpression } from '../../core/src/tree/select';
 import { SourceExpression } from '../../core/src/tree/source';
+import { TernaryExpression } from '../../core/src/tree/ternary';
 import { UnaryExpression } from '../../core/src/tree/unary';
 import { VariableExpression } from '../../core/src/tree/variable';
 import { Serializable } from '../../core/src/type';
@@ -72,7 +82,9 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
             }
         }
         case `CaseBlock`:
-            throw new Error(`not implemented`);
+            return processCaseBlock(expression as CaseBlock);
+        case  `CaseExpression`:
+            return processCaseExpression(expression as CaseExpression);
         case `Column`: {
             const column = expression as Column;
             const { sql, variables } = compile(column.expression);
@@ -91,28 +103,35 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
                 sql: encodeIdentifier((expression as Identifier).name),
                 variables: []
             };
-        case `JoinClause`:
-            throw new Error(`not implemented`);
         case `JoinExpression`:
-            throw new Error(`not implemented`);
+            return processJoinExpression(expression as JoinExpression);
         case `Literal`:
             return {
                 sql: encodePrimitive((expression as Literal).value),
                 variables: []
             };
         case `SelectExpression`:
-            throw new Error(`not implemented`);
+            return processSelectExpression(expression as SelectExpression);
         case `SourceExpression`: {
             const source = expression as SourceExpression;
             const resource = encodeIdentifier(source.resource);
             const name = encodeIdentifier(source.name);
             return {
-                sql: `${resource}.${name}`,
+                sql: `${resource} AS ${name}`,
                 variables: []
             };
         }
-        case `TernaryExpression`:
-            throw new Error(`not implemented`);
+        case `TernaryExpression`: {
+            const ternary = expression as TernaryExpression;
+            const caseBlock = new CaseBlock(
+                ternary.test,
+                ternary.consequent,
+            );
+
+            const caseExpression = new CaseExpression([caseBlock], ternary.alternate);
+            return compile(caseExpression);
+        }
+        break;
         case `UnaryExpression`: {
             const unary = expression as UnaryExpression;
             const { sql, variables } = compile(unary.expression);
@@ -140,6 +159,56 @@ function encodePrimitive(value: string | number | boolean | null | undefined) {
     }
 
     return `'${value.replace(/'/g, `''`)}'`;
+}
+
+function processCaseBlock(block: CaseBlock): SqlFragment {
+    const test = compile(block.test);
+    const consequent = compile(block.consequent);
+    return {
+        sql: `WHEN ${test.sql} THEN ${consequent.sql}`,
+        variables: [...test.variables, ...consequent.variables],
+    };
+}
+
+function processCaseExpression(expression: CaseExpression): SqlFragment {
+    const blocks = expression.when.map(processCaseBlock);
+    const alternate = compile(expression.alternate);
+
+    return {
+        sql: `CASE\n\t${blocks.join(`\n\t`)}\n\tELSE ${alternate.sql}\nEND`,
+        variables: [...blocks.map((block) => block.variables).flat(), ...alternate.variables],
+    };
+}
+
+function processJoinClause(clause: JoinClause): SqlFragment {
+    const left = compile(clause.left);
+    const right = compile(clause.right);
+
+    const sql = generateJoinSql(left.sql, clause.operator, right.sql);
+    return {
+        sql,
+        variables: [...left.variables, ...right.variables],
+    };
+}
+
+function processJoinExpression(join: JoinExpression): SqlFragment {
+    const clauses = join.join.map(
+        (clause) => processJoinClause(clause)
+    );
+    const clausesSql = clauses
+        .map((clause) => clause.sql)
+        .join(`\n\tAND `);
+
+    const inner = compile(join.source);
+    const sql = `JOIN ${inner} AS ${encodeIdentifier(join.name)} ON\n\t${clausesSql}`;
+
+    return {
+        sql,
+        variables: [
+            ...inner.variables,
+            ...clauses.map((clause) => clause.variables).flat()
+        ],
+    };
 }
 
 function generateBinarySql(left: string, operator: BinaryOperator, right: string) {
@@ -185,5 +254,76 @@ function generateLogicalSql(left: string, operator: LogicalOperator, right: stri
             return `COALESCE(${left}, ${right})`;
         default:
             throw new Error(`Operator "${operator}" is not supported`);
+    }
+}
+
+function generateJoinSql(left: string, operator: EqualityOperator, right: string) {
+    if (operator !== `==`) {
+        throw new Error(`Unsupported operator "${operator}" received`);
+    }
+
+    return `${left} = ${right}`;
+}
+
+function processSelectExpression(select: SelectExpression): SqlFragment {
+    const columns = asArray(select.columns).map((column) => {
+        const { sql, variables } = compile(column.expression);
+        return {
+            sql: `${sql} AS ${encodeIdentifier(column.name)}`,
+            variables,
+        };
+    });
+    const joins = select.join.map(compile);
+
+    const column = {
+        sql: columns.map((c) => c.sql).join(`, `),
+        variables: columns.map((c) => c.variables).flat(),
+    };
+
+    // TODO: Need to add brackets if this is not a source expression
+    // TODO: This is coming out as [Products].[Products]
+    const from = compile(select.source);
+    
+    const join = {
+        sql: joins.map((j) => j.sql).join(`\n`),
+        variables: columns.map((c) => c.variables).flat(),
+    };
+
+    const where = select.where === undefined ?
+        undefined :
+        compile(select.where);
+
+    const parts = [
+        `SELECT ${column.sql}`,
+        `FROM ${from.sql}`,
+        join.sql,
+    ].filter(Boolean);
+
+    if (where) {
+        parts.push(`WHERE ${where.sql}`);
+    }
+
+    const sql = parts.join(`\n`);
+    const variables = [
+        ...column.variables,
+        ...from.variables,
+        ...join.variables,
+    ];
+
+    if (where) {
+        variables.push(...where.variables);
+    }
+
+    return {
+        sql,
+        variables,
+    };
+}
+
+function asArray<T>(value: T | T[]): T[] {
+    if (Array.isArray(value)) {
+        return value;
+    } else {
+        return [value];
     }
 }

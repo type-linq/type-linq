@@ -11,6 +11,9 @@ export class JoinClause extends BinaryExpressionBase<`JoinClause`, `==`> {
     }
 }
 
+// TODO: How can this be right!?
+// Because it gets added to the select....
+
 export class JoinExpression extends Expression<`JoinExpression`> {
     expressionType = `JoinExpression` as const;
     source: SourceExpression;

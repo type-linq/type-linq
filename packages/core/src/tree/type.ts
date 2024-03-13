@@ -31,6 +31,10 @@ export class BooleanType {
     }
 }
 
+export class BinaryType {
+    name = `binary`;
+}
+
 export class NullType {
     name = `null`;
 }
@@ -39,7 +43,7 @@ export type Columns = {
     [name: string]: Type;
 }
 
-export class EntityType<TColumns extends Columns> {
+export class EntityType<TColumns extends Columns = Columns> {
     name = `entity`;
     columns: TColumns;
 
@@ -105,4 +109,60 @@ export function walkUnion(type: Type, visitor: (type: Type) => void) {
     } else {
         visitor(type);
     }
+}
+
+export function areTypesEqual(t1: Type, t2: Type) {
+    if (t1.name !== t2.name) {
+        return false;
+    }
+
+    switch (t1.name) {
+        case `entity`: {
+            const e1 = t1 as EntityType<Columns>;
+            const e2 = t2 as EntityType<Columns>;
+
+            if (Object.keys(e1.columns) !== Object.keys(e2.columns)) {
+                return false;
+            }
+
+            for (const [name, e1Type] of Object.entries(e1.columns)) {
+                const e2Type = e2.columns[name];
+                if (e2Type === undefined) {
+                    return false;
+                }
+
+                if (areTypesEqual(e1Type, e2Type) === false) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        case `union`: {
+            const u1 = t1 as UnionType;
+            const u2 = t2 as UnionType;
+
+            if (u1.types.length !== u2.types.length) {
+                return false;
+            }
+
+            const u2Types = u2.types.slice();
+
+            for (const u1Type of u1.types) {
+                for (let index = 0; index < u2Types.length; index++) {
+                    const u2Type = u2Types[index];
+
+                    if (areTypesEqual(u1Type, u2Type)) {
+                        u2Types.splice(index, 1);
+                        index--;
+                    }
+                }
+            }
+
+            return u2Types.length === 0;
+        }
+    }
+
+    return true;
+
 }

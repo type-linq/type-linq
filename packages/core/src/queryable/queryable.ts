@@ -2,7 +2,7 @@ import { QueryProvider } from '../query-provider';
 import { Expression, ExpressionType } from '../tree/expression';
 import { select } from './select';
 import { where } from './where';
-import { Map, Predicate } from '../type';
+import { Map, Predicate, Serializable } from '../type';
 
 export class Queryable<TElement> {
     readonly provider: QueryProvider;
@@ -22,7 +22,7 @@ export class Queryable<TElement> {
         return sel.call(this, map, args);
     }
 
-    where<TArgs = undefined>(predicate: Predicate<TElement, TArgs>, args?: TArgs) {
+    where<TArgs extends Serializable | undefined = undefined>(predicate: Predicate<TElement, TArgs>, args?: TArgs) {
         const whr = where<TElement, TArgs>;
         return whr.call(this, predicate, args);
     }

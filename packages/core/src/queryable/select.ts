@@ -47,7 +47,7 @@ export function select<TElement, TMapped, TArgs = undefined>(
         throw new Error(`Expected either a source expression or a select expression`);
     }
 
-    return new Queryable<TElement>(
+    return new Queryable<TMapped>(
         this.provider,
         select,
     );
@@ -105,14 +105,14 @@ export function transformSelect(
                 throw new Error(`Unsupported column Expression.type "${expression.type}"`);
         }
 
-        const { expression: exp, linkChains } = convert(
+        const { expression: exp, linkMap } = convert(
             sources,
             expression,
             varsName,
             globals,
         );
 
-        return new Column(exp, name, undefined, linkChains);
+        return new Column(exp, name, linkMap);
     }
 }
 
