@@ -25,7 +25,7 @@ export function where<TElement, TArgs = unknown>(
         readName(ast.params.at(-1)!) :
         undefined;
 
-    const sources: Record<string | symbol, Expression<string>> = {};
+    const sources: Record<string | symbol, Expression<ExpressionType>> = {};
     if (sourceName !== undefined) {
         sources[sourceName] = this.expression;
     }

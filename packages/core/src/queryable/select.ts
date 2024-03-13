@@ -1,7 +1,7 @@
 import { convert } from '../convert/convert';
 import { readName } from '../convert/util';
 import { Queryable } from './queryable';
-import { Expression } from '../tree/expression';
+import { Expression, ExpressionType } from '../tree/expression';
 import {
     Expression as AstExpression,
     ExpressionTypeKey as AstExpressionTypeKey,
@@ -66,7 +66,7 @@ export function transformSelect(
         readName(expression.params[0]) :
         undefined;
 
-    const sources: Record<string | symbol, Expression<string>> = {};
+    const sources: Record<string | symbol, Expression<ExpressionType>> = {};
     if (sourceName !== undefined) {
         sources[sourceName] = source;
     }

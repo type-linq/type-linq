@@ -17,20 +17,32 @@
 
 import { Database } from 'sqlite3';
 import { QueryProvider } from '../../core/src/query-provider';
-import { Queryable } from '../../core/src/queryable';
+import { Queryable } from '../../core/src/queryable/queryable';
 import { Serializable } from '../../core/src/type';
-import { prepare } from './compile';
 import { DatabaseSchema } from './schema';
+import { Globals } from '../../core/src/convert/global';
+import { Type } from '../../core/src/tree/type';
+import { Expression, ExpressionType } from '../../core/src/tree/expression';
+import { GlobalExpression } from '../../core/src/tree/global';
+import { CallExpression } from '../../core/src/tree/call';
 
 export class SqliteProvider extends QueryProvider {
-    globals: Map<string[], string>;
+    globals: Globals;
+    #globalIdentifiers: unknown;
+
     #dbFile: string;
     #db?: Database;
     #schema: DatabaseSchema;
 
-    constructor(db: string, schema: DatabaseSchema, globals: Map<string[], string>) {
+    constructor(db: string, schema: DatabaseSchema, globals?: unknown) {
         super();
-        this.globals = globals;
+
+        this.#globalIdentifiers = globals;
+        this.globals = {
+            mapAccessor: this.#mapAccessor,
+            mapIdentifier: this.#mapIdentifier,
+        };
+
         this.#dbFile = db;
         this.#schema = schema;
     }
@@ -82,6 +94,14 @@ export class SqliteProvider extends QueryProvider {
                 }
             });
         });
+    }
+
+    #mapIdentifier = (...path: string[]): GlobalExpression | undefined => {
+        throw new Error(`not implemented`);
+    }
+
+    #mapAccessor = (type: Type, object: Expression<ExpressionType>, name: string | symbol, args: Expression<ExpressionType>[]): GlobalExpression | CallExpression | undefined => {
+        throw new Error(`not implemented`);
     }
 }
 

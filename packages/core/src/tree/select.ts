@@ -1,6 +1,6 @@
 import { LogicalExpression } from './binary';
 import { Column } from './column';
-import { Expression } from './expression';
+import { Expression, ExpressionType } from './expression';
 import { JoinExpression } from './join';
 import { Columns, EntityType, Type } from './type';
 
@@ -9,14 +9,14 @@ export class SelectExpression extends Expression<`SelectExpression`> {
     type: Type;
 
     columns: Column[] | Column;
-    source: Expression<string>;
+    source: Expression<ExpressionType>;
     join: JoinExpression[];
     // TODO: This needs to store the links as well....
     where?: LogicalExpression;
 
     constructor(
         columns: Column[] | Column,
-        source: Expression<string>,
+        source: Expression<ExpressionType>,
         where?: LogicalExpression,
         join: JoinExpression[] = [],
     ) {

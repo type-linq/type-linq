@@ -1,14 +1,14 @@
 import { QueryProvider } from '../query-provider';
-import { Expression } from '../tree/expression';
+import { Expression, ExpressionType } from '../tree/expression';
 import { select } from './select';
 import { where } from './where';
 import { Map, Predicate } from '../type';
 
 export class Queryable<TElement> {
     readonly provider: QueryProvider;
-    readonly expression: Expression<string>;
+    readonly expression: Expression<ExpressionType>;
 
-    constructor(provider: QueryProvider, expression: Expression<string>) {
+    constructor(provider: QueryProvider, expression: Expression<ExpressionType>) {
         this.provider = provider;
         this.expression = expression;
     }

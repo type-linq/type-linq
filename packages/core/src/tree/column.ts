@@ -1,4 +1,4 @@
-import { Expression } from './expression';
+import { Expression, ExpressionType } from './expression';
 import { Identifier } from './identifier';
 import { SourceExpression } from './source';
 import { Type } from './type';
@@ -6,7 +6,7 @@ import { Type } from './type';
 export class Column extends Expression<`Column`> {
     expressionType = `Column` as const;
 
-    expression: Expression<string>;
+    expression: Expression<ExpressionType>;
     name: string;
     linkChain: Record<string, SourceExpression[]>;
 
@@ -14,11 +14,11 @@ export class Column extends Expression<`Column`> {
         return this.expression.type;
     }
 
-    constructor(expression: Expression<string>, name: string, columnType: undefined, linkChain: Record<string, SourceExpression[]>);
-    constructor(expression: Expression<string>, name: string);
+    constructor(expression: Expression<ExpressionType>, name: string, columnType: undefined, linkChain: Record<string, SourceExpression[]>);
+    constructor(expression: Expression<ExpressionType>, name: string);
     constructor(expression: string, name: string, columnType: Type);
     constructor(expression: string, name: string, columnType: Type, linkChain: Record<string, SourceExpression[]>);
-    constructor(expression: Expression<string> | string, name: string, columnType?: Type, linkChain: Record<string, SourceExpression[]> = {}) {
+    constructor(expression: Expression<ExpressionType> | string, name: string, columnType?: Type, linkChain: Record<string, SourceExpression[]> = {}) {
         super();
 
         if (typeof expression === `string`) {

@@ -1,3 +1,4 @@
+import { Serializable } from '../type';
 import { Expression } from './expression';
 import { BooleanType, NullType, NumberType, StringType, Type, UnionType } from './type';
 
@@ -5,9 +6,9 @@ export class VariableExpression extends Expression<`VariableExpression`> {
     expressionType = `VariableExpression` as const;
     type: Type;
     path: string[];
-    bound: unknown;
+    bound: Serializable;
 
-    constructor(path: string[], bound?: unknown) {
+    constructor(path: string[], bound?: Serializable) {
         super();
         this.path = path;
         this.bound = bound;
@@ -50,7 +51,7 @@ export class VariableExpression extends Expression<`VariableExpression`> {
         }
     }
 
-    access(supplied?: unknown) {
+    access(supplied?: Serializable): Serializable {
         const vars = supplied === undefined ?
             this.bound :
             supplied;
@@ -60,6 +61,7 @@ export class VariableExpression extends Expression<`VariableExpression`> {
         }
 
         if (vars === undefined || vars === null) {
+            // TODO: We should probably throw an exception here
             return undefined;
         }
 

@@ -1,6 +1,6 @@
 // TODO: Better name
 import { readName } from './util';
-import { Expression as QueryExpression } from '../tree/expression';
+import { ExpressionType, Expression as QueryExpression } from '../tree/expression';
 import { SourceExpression } from '../tree/source';
 import { Expression, ExpressionTypeKey, Operator } from '../type';
 import { walk } from '../walk';
@@ -14,7 +14,7 @@ import { Literal } from '../tree/literal';
 import { BinaryExpression, BinaryOperator, LogicalExpression, LogicalOperator } from '../tree/binary';
 import { TernaryExpression } from '../tree/ternary';
 
-export type Sources = Record<string | symbol, QueryExpression<string>>;
+export type Sources = Record<string | symbol, QueryExpression<ExpressionType>>;
 
 export function convert(
     sources: Sources,
@@ -22,7 +22,7 @@ export function convert(
     varsName?: string | symbol,
     globals?: Globals,
     args?: unknown,
-): { expression: QueryExpression<string>, linkChains: Record<string, SourceExpression[]> } {
+): { expression: QueryExpression<ExpressionType>, linkChains: Record<string, SourceExpression[]> } {
     const linkChains: Record<string, SourceExpression[]> = {};
 
     return {
@@ -30,7 +30,7 @@ export function convert(
         expression: process(expression),
     }
 
-    function process(expression: Expression<ExpressionTypeKey>): QueryExpression<string> {
+    function process(expression: Expression<ExpressionTypeKey>): QueryExpression<ExpressionType> {
         switch (expression.type) {
             case `Identifier`:
                 return processIdentifier(expression);
@@ -131,7 +131,11 @@ export function convert(
         }
     }
 
-    function processIdentifier(expression: Expression<`Identifier`>): QueryExpression<string> {
+    function processIdentifier(expression: Expression<`Identifier`>): QueryExpression<ExpressionType> {
+        if (expression.name === `undefined`) {
+            return new Literal(null);
+        }
+
         const source = sources[expression.name];
 
         if (source !== undefined) {
@@ -155,7 +159,7 @@ export function convert(
         throw new Error(`No identifier "${String(expression.name)}" found (on sources or global)`);
     }
 
-    function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression<string> {
+    function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression<ExpressionType> {
         if (expression.callee.type !== `MemberExpression`) {
             throw new Error(`Expected CallExpression to always act on a MemberExpression`);
         }
@@ -172,7 +176,7 @@ export function convert(
         return exp;
     }
 
-    function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression<string> {
+    function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression<ExpressionType> {
         const expressionSource = memberExpressionRoot(expression);
         if (expressionSource.type === `Identifier`&& expressionSource.name === varsName) {
             const path: string[] = [];

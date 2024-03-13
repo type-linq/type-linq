@@ -1,6 +1,6 @@
 import { CallExpression } from '../tree/call';
 import { GlobalExpression } from '../tree/global';
-import { Expression as QueryExpression } from '../tree/expression';
+import { ExpressionType, Expression as QueryExpression } from '../tree/expression';
 import { Type, isScalar } from '../tree/type';
 import { Expression, ExpressionTypeKey } from '../type';
 import { expressionRoot, walkLeaf } from '../walk';
@@ -9,7 +9,7 @@ import { readName } from './util';
 export type Globals = {
     // TODO: We have no way to exclude identifiers!
     mapIdentifier(...path: string[]): GlobalExpression | undefined;
-    mapAccessor(type: Type, object: QueryExpression<string>, name: string | symbol, args: QueryExpression<string>[]): GlobalExpression | CallExpression | undefined;
+    mapAccessor(type: Type, object: QueryExpression<ExpressionType>, name: string | symbol, args: QueryExpression<ExpressionType>[]): GlobalExpression | CallExpression | undefined;
 };
 
 export function mapGlobal(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals): GlobalExpression {
@@ -66,9 +66,9 @@ export function isGlobalIdentifier(expression: Expression<ExpressionTypeKey>, gl
 }
 
 export function mapGlobalAccessor(
-    object: QueryExpression<string>,
+    object: QueryExpression<ExpressionType>,
     name: string | symbol,
-    args: QueryExpression<string>[],
+    args: QueryExpression<ExpressionType>[],
     globals?: Globals
 ) {
     if (!globals) {

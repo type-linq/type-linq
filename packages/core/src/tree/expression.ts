@@ -1,4 +1,7 @@
-// TODO: Export all possible expression types...
+export type ExpressionType = `BinaryExpression` | `LogicalExpression` | `VariableExpression` |
+    `CallExpression` | `CaseBlock` | `Column` | `GlobalExpression` | `Identifier` | `JoinClause` |
+    `JoinExpression` | `Literal` | `SelectExpression` | `SourceExpression` | `TernaryExpression` |
+    `UnaryExpression`;
 
 import { Type } from './type';
 

@@ -1,12 +1,12 @@
 import { BinaryExpressionBase } from './binary';
-import { Expression } from './expression';
+import { Expression, ExpressionType } from './expression';
 import { SourceExpression } from './source';
 import { Type } from './type';
 
 export class JoinClause extends BinaryExpressionBase<`JoinClause`, `==`> {
     expressionType = `JoinClause` as const;
 
-    constructor(left: Expression<string>, right: Expression<string>) {
+    constructor(left: Expression<ExpressionType>, right: Expression<ExpressionType>) {
         super(left, `==`, right);
     }
 }
