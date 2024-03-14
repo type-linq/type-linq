@@ -1,4 +1,3 @@
-// TODO: Better name
 import { fetchSources, readName } from './util';
 import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type';
 import { walk } from '../walk';

@@ -1,32 +1,18 @@
-// import {
-//     Prisma,
-
-//     Categories,
-//     CustomerCustomerDemo,
-//     CustomerDemographics,
-//     EmployeeTerritories,
-//     Employees,
-//     Order_Details,
-//     Orders,
-//     Products,
-//     Regions,
-//     Shippers,
-//     Suppliers,
-//     Territories
-// } from '@prisma/client/edge'
-
 import { Database } from 'sqlite3';
-import { QueryProvider } from '../../core/src/query-provider';
-import { Queryable } from '../../core/src/queryable/queryable';
-import { Serializable } from '../../core/src/type';
-import { DatabaseSchema } from './schema';
-import { Globals } from '../../core/src/convert/global';
-import { Type } from '../../core/src/tree/type';
-import { Expression, ExpressionType } from '../../core/src/tree/expression';
-import { GlobalExpression } from '../../core/src/tree/global';
-import { CallExpression } from '../../core/src/tree/call';
+import {
+    QueryProvider,
+    Queryable,
+    Serializable,
+    Globals,
+    Type,
+    Expression,
+    ExpressionType,
+    GlobalExpression,
+    CallExpression,
+    SelectExpression,
+} from '@type-linq/core';
 import { compile } from './compile';
-import { SelectExpression } from '../../core/src/tree';
+import { DatabaseSchema } from './schema';
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;

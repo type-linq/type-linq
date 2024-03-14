@@ -4,21 +4,24 @@ import {
     LogicalExpression,
     LogicalOperator,
     EqualityOperator,
-} from '../../core/src/tree/binary';
-import { CallExpression } from '../../core/src/tree/call';
-import { CaseBlock, CaseExpression } from '../../core/src/tree/case';
-import { Column } from '../../core/src/tree/column';
-import { Expression, ExpressionType } from '../../core/src/tree/expression';
-import { GlobalExpression } from '../../core/src/tree/global';
-import { Identifier } from '../../core/src/tree/identifier';
-import { JoinClause, JoinExpression } from '../../core/src/tree/join';
-import { Literal } from '../../core/src/tree/literal';
-import { SelectExpression } from '../../core/src/tree/select';
-import { SourceExpression } from '../../core/src/tree/source';
-import { TernaryExpression } from '../../core/src/tree/ternary';
-import { UnaryExpression } from '../../core/src/tree/unary';
-import { VariableExpression } from '../../core/src/tree/variable';
-import { Serializable } from '../../core/src/type';
+    CallExpression,
+    CaseBlock,
+    CaseExpression,
+    Column,
+    Expression,
+    ExpressionType,
+    GlobalExpression,
+    Identifier,
+    JoinClause,
+    JoinExpression,
+    Literal,
+    SelectExpression,
+    SourceExpression,
+    TernaryExpression,
+    UnaryExpression,
+    VariableExpression,
+    Serializable,
+} from '@type-linq/core';
 
 export type SqlFragment = {
     sql: string;

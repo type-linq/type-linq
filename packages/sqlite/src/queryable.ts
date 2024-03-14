@@ -1,5 +1,7 @@
-import { Queryable } from '../../core/src/queryable/queryable';
-import { SourceExpression } from '../../core/src/tree/source';
+import {
+    Queryable,
+    SourceExpression,
+} from '@type-linq/core';
 import { SqliteProvider } from './provider';
 
 export class SqliteQueryableSource<TElement> extends Queryable<TElement> {

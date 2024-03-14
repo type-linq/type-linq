@@ -1,10 +1,17 @@
 import objectHash from 'object-hash';
-import { Column } from '../../core/src/tree/column';
-import { Expression } from '../../core/src/tree/expression';
-import { SourceExpression } from '../../core/src/tree/source';
-import { BinaryType, NumberType, StringType, EntityType } from '../../core/src/tree/type';
+
+import {
+    Column,
+    Expression,
+    SourceExpression,
+    BinaryType,
+    NumberType,
+    StringType,
+    EntityType,
+    Identifier,
+} from '@type-linq/core';
+
 import { DatabaseSchema, TableSchema } from './schema';
-import { Identifier } from '../../core/src/tree/identifier';
 
 export function buildSources(schema: DatabaseSchema) {
     const sources: Record<string, SourceExpression> = {};

@@ -10,7 +10,7 @@ export type TableColumns = {
     [name: string]: ColumnType | NullableColumnType;
 }
 
-type TableLink = {
+export type TableLink = {
     table: string;
     columns: {
         [name: string]: string;
@@ -81,9 +81,6 @@ export async function fetchSchema(file: string) {
                     resolve(rows);
                 }
             })
-        }).catch((error) => {
-            console.error(`Error executing SQL`, error);
-            throw error;
         });
     }
 
@@ -140,6 +137,7 @@ export async function fetchSchema(file: string) {
 }
 
 export function buildSchemaFile(schema: DatabaseSchema) {
+    // TODO: This is missing build sources...
     const full = [
         `import { DatabaseSchema } from '@type-linq/sqlite';`,
         ``,
@@ -225,73 +223,3 @@ export function buildType(schema: TableSchema<TableColumns>) {
         return name.replace(/[^A-Za-z0-9$_]/gi, `_`);
     }
 }
-
-
-// select * from sqlite_schema
-
-/*
-type    name    tbl_name
-
-table	Categories	Categories
-table	sqlite_sequence	sqlite_sequence
-table	CustomerCustomerDemo	CustomerCustomerDemo
-index	sqlite_autoindex_CustomerCustomerDemo_1	CustomerCustomerDemo
-table	CustomerDemographics	CustomerDemographics
-index	sqlite_autoindex_CustomerDemographics_1	CustomerDemographics
-table	Customers	Customers
-index	sqlite_autoindex_Customers_1	Customers
-table	Employees	Employees
-table	EmployeeTerritories	EmployeeTerritories
-index	sqlite_autoindex_EmployeeTerritories_1	EmployeeTerritories
-table	Order Details	Order Details
-index	sqlite_autoindex_Order Details_1	Order Details
-table	Orders	Orders
-table	Products	Products
-table	Regions	Regions
-table	Shippers	Shippers
-table	Suppliers	Suppliers
-table	Territories	Territories
-index	sqlite_autoindex_Territories_1	Territories
-view	Alphabetical list of products	Alphabetical list of products
-view	Current Product List	Current Product List
-view	Customer and Suppliers by City	Customer and Suppliers by City
-view	Invoices	Invoices
-view	Orders Qry	Orders Qry
-view	Order Subtotals	Order Subtotals
-view	Product Sales for 1997	Product Sales for 1997
-view	Products Above Average Price	Products Above Average Price
-view	Products by Category	Products by Category
-view	Quarterly Orders	Quarterly Orders
-view	Sales Totals by Amount	Sales Totals by Amount
-view	Summary of Sales by Quarter	Summary of Sales by Quarter
-view	Summary of Sales by Year	Summary of Sales by Year
-view	Category Sales for 1997	Category Sales for 1997
-view	Order Details Extended	Order Details Extended
-view	Sales by Category	Sales by Category
-view	ProductDetails_V	ProductDetails_V
-
-
-
-SELECT * FROM pragma_table_info('Products');
-
-cid name        type    notnull
-0	ProductID	INTEGER	1		1
-1	ProductName	TEXT	1		0
-2	SupplierID	INTEGER	0		0
-3	CategoryID	INTEGER	0		0
-4	QuantityPerUnit	TEXT	0		0
-5	UnitPrice	NUMERIC	0	0	0
-6	UnitsInStock	INTEGER	0	0	0
-7	UnitsOnOrder	INTEGER	0	0	0
-8	ReorderLevel	INTEGER	0	0	0
-9	Discontinued	TEXT	1	'0'	0
-
-
-
-SELECT * FROM pragma_foreign_key_list('Products');
-
-id  seq table (lnk) from (lnk)  to
-0	0	Suppliers	SupplierID	SupplierID	NO ACTION	NO ACTION	NONE
-1	0	Categories	CategoryID	CategoryID	NO ACTION	NO ACTION	NONE
-
-*/
