@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import { parse } from 'espree';
 import { Expression, ExpressionType } from '../type';
 import { bindVars } from '../convert/prepare/args';
