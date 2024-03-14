@@ -221,6 +221,7 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     }
 
     console.log(`Done`);
+    
 }());
 
 // SqliteQueryableSource
