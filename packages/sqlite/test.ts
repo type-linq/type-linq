@@ -1,7 +1,14 @@
 import { SqliteProvider } from './src/provider';
 import { SqliteQueryableSource } from './src/queryable';
 import { buildSources } from './src/sources';
-import { DatabaseSchema } from './src/schema';
+import { DatabaseSchema, buildSchemaFile, fetchSchema } from './src/schema';
+
+const DB = `D:\\Projects\\type-linq\\packages\\sqlite\\resources\\northwind.db`;
+
+(async function () {
+    const schema = await fetchSchema(DB);
+    console.log(buildSchemaFile(schema));
+}());
 
 // TODO: Generate these types automatically
 
@@ -53,12 +60,11 @@ const schema: DatabaseSchema = {
                 ReorderLevel: `INTEGER NULL`,
                 Discontinued: `TEXT`,
             },
-            primaryKey: [`ProductID`],
             links: {
                 Supplier: {
                     table: `Suppliers`,
                     columns: {
-                        SupplierID: `SuppliedID`,
+                        SupplierID: `SupplierID`,
                     }
                 }
             }
@@ -80,7 +86,6 @@ const schema: DatabaseSchema = {
                 HomePage: `TEXT NULL`,
             },
 
-            primaryKey: [`SupplierID`],
             links: {
                 Product: {
                     table: `Products`,
@@ -93,7 +98,7 @@ const schema: DatabaseSchema = {
     },
 } as const;
 
-const provider = new SqliteProvider(`D:\\Projects\\type-linq\\packages\\sqlite\\resources\\northwind.db`, schema, new Map());
+const provider = new SqliteProvider(DB, schema, new Map());
 
 /*
 type Schema = typeof schema;
@@ -184,8 +189,15 @@ class ProductsQueryable extends SqliteQueryableSource<Product> {
     }
 }
 
+class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
+    constructor() {
+        super(provider, sources.Suppliers)
+    }
+}
+
 (async function run() {
     const products = new ProductsQueryable();
+    const suppliers = new SuppliersQueryable();
 
     const productId = 57;
     const recordLevel = 10;
@@ -193,12 +205,16 @@ class ProductsQueryable extends SqliteQueryableSource<Product> {
 
     const query1 = products;
 
+    // TODO: Why is the column in the where clause not fully qualified?
+    //  There must be somewhere we are not adding scope to the identifier...?
+
     const query2 = products
         .select((c) => ({
             productId: c.ProductID,
-            name: c.ProductName
+            name: c.ProductName,
+            supplier: c.Supplier.CompanyName,
         }))
-        .where((c) => c.name > arg, { arg })
+        .where((c) => c.supplier > arg, { arg })
 
     for await (const product of query2) {
         console.dir(product);

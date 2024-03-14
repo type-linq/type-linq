@@ -98,11 +98,16 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
                 sql: (expression as GlobalExpression).name,
                 variables: []
             };
-        case `Identifier`: 
+        case `Identifier`: {
+            const identifier = expression as Identifier;
+            const sql = [...identifier.scope, identifier.name].map(
+                encodeIdentifier
+            ).join(`.`);
             return {
-                sql: encodeIdentifier((expression as Identifier).name),
+                sql,
                 variables: []
             };
+        }
         case `JoinExpression`:
             return processJoinExpression(expression as JoinExpression);
         case `Literal`:
@@ -131,7 +136,6 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
             const caseExpression = new CaseExpression([caseBlock], ternary.alternate);
             return compile(caseExpression);
         }
-        break;
         case `UnaryExpression`: {
             const unary = expression as UnaryExpression;
             const { sql, variables } = compile(unary.expression);
@@ -199,8 +203,12 @@ function processJoinExpression(join: JoinExpression): SqlFragment {
         .map((clause) => clause.sql)
         .join(`\n\tAND `);
 
+    // TODO: We need to be able to give our own name here!
+    // Source expressions are applying their own names!
+    // TODO: The join expressions should create new source expressions....
+
     const inner = compile(join.source);
-    const sql = `JOIN ${inner} AS ${encodeIdentifier(join.name)} ON\n\t${clausesSql}`;
+    const sql = `JOIN ${inner.sql} ON\n\t${clausesSql}`;
 
     return {
         sql,

@@ -1,34 +1,23 @@
 import { BinaryExpression, LogicalExpression } from './binary';
 import { Column } from './column';
-import { Expression, ExpressionType } from './expression';
+import { Expression } from './expression';
 import { JoinExpression } from './join';
 import { SourceExpression } from './source';
 import { Columns, EntityType, Type } from './type';
-import { asArray } from './util';
-
-// TODO: In some sense this must extend a source?
-//  How can we tell primary key from
-
-// TODO: It would be better to change this to have the other expressons applied on top of it...
-//  This would allieviate a lot of the issues we seem to be having with sources....
-
-//  It would be good to have a common expression type
-//      for master functions (like where join, select etc)
-//      and there should be a walkable path which can give use all source expressions
-//      used for joining
+import { asArray, joinExists } from './util';
 
 export class SelectExpression extends Expression<`SelectExpression`> {
     expressionType = `SelectExpression` as const;
     type: Type;
 
     columns: Column[] | Column;
-    source: Expression<ExpressionType>;
+    source: SourceExpression | SelectExpression;
     join: JoinExpression[];
     where?: LogicalExpression | BinaryExpression;
 
     constructor(
         columns: Column[] | Column,
-        source: Expression<ExpressionType>,
+        source: SourceExpression | SelectExpression,
         where?: LogicalExpression | BinaryExpression,
         join: JoinExpression[] = [],
     ) {
@@ -56,6 +45,7 @@ export class SelectExpression extends Expression<`SelectExpression`> {
     }
 
     applyImplicitJoins(): SelectExpression {
+        // TODO: How much of this can be moved to the join handler?
         const joins: JoinExpression[] = [
             ...this.join,
         ];
@@ -75,15 +65,6 @@ export class SelectExpression extends Expression<`SelectExpression`> {
     }
 }
 
-export function joinExists(joins: JoinExpression[], join: JoinExpression) {
-    for (const existing of joins) {
-        if (join.isEqual(existing)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 export function buildImplicitJoins(
     existing: JoinExpression[],
     linkMap: Map<SourceExpression, SourceExpression[]>
@@ -91,6 +72,7 @@ export function buildImplicitJoins(
     const joins: JoinExpression[] = [...existing];
     for (const [joinFrom, joinTos] of linkMap.entries()) {
         for (const joinTo of joinTos) {
+            // TODO: Maybe move this function as a global export instead of on the join expression?
             const join = joinFrom.join(joinTo);
 
             if (joinExists(joins, join)) {

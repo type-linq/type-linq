@@ -23,6 +23,7 @@
   "dependencies": {
     "@prisma/client": "^5.10.2",
     "espree": "^10.0.1",
+    "json5": "^2.2.3",
     "object-hash": "^3.0.0",
     "sqlite3": "^5.1.7"
   },

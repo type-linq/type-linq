@@ -2,10 +2,9 @@ import objectHash from 'object-hash';
 import { Column } from '../../core/src/tree/column';
 import { Expression } from '../../core/src/tree/expression';
 import { SourceExpression } from '../../core/src/tree/source';
-import { BinaryType, NumberType, StringType, Type, EntityType } from '../../core/src/tree/type';
+import { BinaryType, NumberType, StringType, EntityType } from '../../core/src/tree/type';
 import { DatabaseSchema, TableSchema } from './schema';
 import { Identifier } from '../../core/src/tree/identifier';
-import { asArray } from '../../core/src/tree/util';
 
 export function buildSources(schema: DatabaseSchema) {
     const sources: Record<string, SourceExpression> = {};
@@ -44,13 +43,19 @@ export function buildSources(schema: DatabaseSchema) {
     for (const [name, source] of Object.entries(sources)) {
         const table = schema.tables[name];
         for (const link of Object.values(table.links)) {
-            source.link(sources[link.table], link.columns);
-        }
+            const linkTable = schema.tables[link.table];
 
-        for (const column of asArray(source.columns)) {
-            if (column.expression instanceof Identifier) {
-                column.expression.scope.push(source.name);
-            }
+            const columns = Object.entries(link.columns).map(([outerName, innerName]) => {
+                const outerType = createType(table.columns[outerName]);
+                const innerType = createType(linkTable.columns[innerName]);
+                return {
+                    outerName: outerName,
+                    outerType: outerType,
+                    innerName: innerName,
+                    innerType: innerType,
+                };
+            });
+            source.link(sources[link.table], columns);
         }
     }
 
@@ -60,29 +65,8 @@ export function buildSources(schema: DatabaseSchema) {
 function buildColumns(schema: TableSchema) {
     const columns = Object.entries(schema.columns).map(
         ([name, dbType]) => {
-            let type: Type;
-            switch (dbType) {
-                case `TEXT`:
-                case `TEXT NULL`:
-                    type = new StringType();
-                    break;
-                case `NUMERIC`:
-                case `NUMERIC NULL`:
-                case `INTEGER`:
-                case `INTEGER NULL`:
-                case `REAL`:
-                case `REAL NULL`:
-                    type = new NumberType();
-                    break;
-                case `BLOB`:
-                case `BLOB NULL`:
-                    type = new BinaryType();
-                    break;
-            }
-
-            // Note: This is not scoped, we need to scope it once
-            //  the source is created
-            const identifier = new Identifier(name, type);
+            const type = createType(dbType);
+            const identifier = new Identifier(name, type, schema.name);
             return new Column(identifier, name);
         }
     );
@@ -100,4 +84,24 @@ function buildLinkColumns(sources: Record<string, SourceExpression>, schema: Tab
         }
     );
     return columns;
+}
+
+function createType(dbType: string) {
+    switch (dbType) {
+        case `TEXT`:
+        case `TEXT NULL`:
+            return new StringType();
+        case `NUMERIC`:
+        case `NUMERIC NULL`:
+        case `INTEGER`:
+        case `INTEGER NULL`:
+        case `REAL`:
+        case `REAL NULL`:
+            return new NumberType();
+        case `BLOB`:
+        case `BLOB NULL`:
+            return new BinaryType();
+        default:
+            throw new Error(`Unknown db type "${dbType}" received`);
+    }
 }

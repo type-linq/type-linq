@@ -70,14 +70,14 @@ export class VariableExpression extends Expression<`VariableExpression`> {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let current = vars as any;
             while (items.length) {
-                current = current[items.shift()!];
-                if (!current) {
+                const name = items.shift()!;
+                if (name in current === false) {
                     const missing = this.path.slice(0, this.path.length - items.length);
                     throw new Error(
                         `Unable to find identifier on vars "${missing.join(`.`)}"`
                     );
                 }
-                
+                current = current[name];                
             }
             return current;
         }

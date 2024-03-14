@@ -1,24 +1,26 @@
 // TODO: Better name
-import { readName } from './util';
-import { ExpressionType, Expression as QueryExpression } from '../tree/expression';
-import { SourceExpression } from '../tree/source';
+import { fetchSources, readName } from './util';
 import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type';
 import { walk } from '../walk';
 import { Globals, isGlobalIdentifier, mapGlobal, mapGlobalAccessor } from './global';
-import { CallExpression } from '../tree/call';
-import { GlobalExpression } from '../tree/global';
-import { VariableExpression } from '../tree/variable';
-import { UnaryExpression } from '../tree/unary';
-import { Literal } from '../tree/literal';
-import { BinaryExpression, BinaryOperator, LogicalExpression, LogicalOperator } from '../tree/binary';
-import { TernaryExpression } from '../tree/ternary';
-import { CaseBlock, CaseExpression } from '../tree/case';
-import { Column } from '../tree/column';
-import { JoinExpression } from '../tree/join';
-import { SelectExpression } from '../tree/select';
-import { asArray } from '../tree/util';
-import { UnionType } from '../tree/type';
-
+import {
+    BinaryExpression,
+    BinaryOperator,
+    CallExpression,
+    ExpressionType,
+    GlobalExpression,
+    Literal,
+    LogicalExpression,
+    LogicalOperator,
+    Expression as QueryExpression,
+    SelectExpression,
+    SourceExpression,
+    TernaryExpression,
+    UnaryExpression,
+    UnionType,
+    VariableExpression,
+    asArray
+} from '../tree/index';
 export type Sources = Record<string | symbol, QueryExpression<ExpressionType>>;
 
 export function convert(
@@ -187,19 +189,24 @@ export function convert(
     function processExternal(expression: Expression<`ExternalExpression`>) {
         const path: string[] = [];
         walk(expression.expression, (exp) => {
+            if (exp.type === `Property`) {
+                return false;
+            }
+
             if (exp.type === `Identifier`) {
+                path.push(exp.name as string);
                 return false;
             }
             if (exp.type === `Literal`) {
+                path.push(String(exp.value));
                 return false;
             }
             if (exp.type === `MemberExpression`) {
-                const name = readName(exp.property);
-                path.push(name as string);
+                return true;
             }
             throw new Error(`Unexpected expression type "${exp.type}"`);
         });
-        return new VariableExpression(path, args);
+        return new VariableExpression(path.slice(1), args);
     }
 
     function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression<ExpressionType> {
@@ -291,111 +298,3 @@ export function convert(
     }
 }
 
-function fetchSources(expression: QueryExpression<ExpressionType>): SourceExpression[] {
-    switch (expression.expressionType) {
-        case `BinaryExpression`: {
-            // TODO: Need to add brackets in the correct places
-            const binary = expression as BinaryExpression;
-            const sources = [
-                ...fetchSources(binary.left),
-                ...fetchSources(binary.right),
-            ];
-            return sources;
-        }
-        case `LogicalExpression`: {
-            const logical = expression as LogicalExpression;
-            const sources = [
-                ...fetchSources(logical.left),
-                ...fetchSources(logical.right),
-            ];
-            return sources;
-        }
-        case `VariableExpression`: {
-            return [];
-        }
-        case `CallExpression`: {
-            const call = expression as CallExpression;
-            const sources = [
-                ...fetchSources(call.callee),
-                ...call.arguments.map(fetchSources).flat(),
-            ];
-            return sources;
-        }
-        case `CaseBlock`: {
-            const block = expression as CaseBlock;
-            const sources = [
-                ...fetchSources(block.test),
-                ...fetchSources(block.consequent),
-            ];
-            return sources;
-        }
-        case  `CaseExpression`: {
-            const exp = expression as CaseExpression;
-            const sources = [
-                ...exp.when.map(fetchSources).flat(),
-                ...fetchSources(exp.alternate),
-            ];
-            return sources;
-        }
-        case `Column`: {
-            const column = expression as Column;
-            const sources = fetchSources(column.expression);
-            return sources;
-        }
-        case `GlobalExpression`:
-            return [];
-        case `Identifier`: 
-            return [];
-        case `JoinExpression`: {
-            const join = expression as JoinExpression;
-
-            const clauses = join.join.map(
-                (clause) => [...fetchSources(clause.left), ...fetchSources(clause.right)]
-            ).flat();
-
-            const sources = [
-                ...fetchSources(join.source),
-                ...clauses,
-            ];
-            return sources;
-        }
-        case `Literal`:
-            return [];
-        case `SelectExpression`: {
-            const exp = expression as SelectExpression;
-            const sources = [
-                ...asArray(exp.columns).map(
-                    (column) => fetchSources(column.expression)
-                ).flat(),
-                ...exp.join.map(fetchSources).flat(),
-                ...fetchSources(exp.source),
-            ];
-
-            if (exp.where) {
-                sources.push(...fetchSources(exp.where));
-            }
-
-            return sources;
-        }
-        case `SourceExpression`: {
-            const source = expression as SourceExpression;
-            return [source];
-        }
-        case `TernaryExpression`: {
-            const exp = expression as TernaryExpression;
-            const sources = [
-                ...fetchSources(exp.test),
-                ...fetchSources(exp.consequent),
-                ...fetchSources(exp.alternate),
-            ];
-            return sources;
-        }
-        case `UnaryExpression`: {
-            const unary = expression as UnaryExpression;
-            return fetchSources(unary.expression);
-        }
-        default:
-            throw new Error(`Unkown expression type "${expression.expressionType}" received`);
-    }
-
-}

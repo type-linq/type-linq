@@ -454,3 +454,4 @@ export type Serializable = Primitive | {
 
 export type Predicate<TElement, TArgs> = (element: TElement, args: TArgs) => boolean;
 export type Map<TInput, TOutput> = (input: TInput) => TOutput;
+export type Merge<TInput1, TInput2, TOutput> = (input1: TInput1, input2: TInput2) => TOutput;

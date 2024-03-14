@@ -1,7 +1,6 @@
 import { convert } from '../convert/convert';
 import { readName } from '../convert/util';
 import { Queryable } from './queryable';
-import { Expression, ExpressionType } from '../tree/expression';
 import {
     Expression as AstExpression,
     ExpressionTypeKey as AstExpressionTypeKey,
@@ -12,6 +11,8 @@ import { SourceExpression } from '../tree/source';
 import { SelectExpression } from '../tree/select';
 import { Globals } from '../convert/global';
 import { Column } from '../tree/column';
+import { buildSources, varsName } from './util';
+import { asArray, isScalar } from '../tree';
 
 export const SCALAR_NAME = `__scalar__11cbd49f`;
 
@@ -25,14 +26,14 @@ export function select<TElement, TMapped, TArgs = undefined>(
     let select: SelectExpression;
     if (this.expression instanceof SourceExpression) {
         const columns = transformSelect(
-            this.expression,
+            [this.expression],
             ast,
             this.provider.globals,
         );
         select = new SelectExpression(columns, this.expression);
     } else if (this.expression instanceof SelectExpression) {
         const columns = transformSelect(
-            this.expression,
+            [this.expression],
             ast,
             this.provider.globals,
         );
@@ -54,23 +55,15 @@ export function select<TElement, TMapped, TArgs = undefined>(
 }
 
 export function transformSelect(
-    source: SelectExpression | SourceExpression,
+    sources: (SelectExpression | SourceExpression)[],
     expression: AstExpression<`ArrowFunctionExpression`>,
     globals?: Globals,
 ): Column | Column[] {
-    const varsName = expression.params.length > 1 ?
-        readName(expression.params.at(-1)!) :
-        undefined;
+    // TODO: If this select ends on a select expression, we need to get the scalar columns
+    //  and add them
 
-    const sourceName = expression.params.length > 0 ?
-        readName(expression.params[0]) :
-        undefined;
-
-    const sources: Record<string | symbol, Expression<ExpressionType>> = {};
-    if (sourceName !== undefined) {
-        sources[sourceName] = source;
-    }
-
+    const vars = varsName(expression);
+    const sourceMap = buildSources(expression, ...sources);
     const columns = processColumns();
     return columns;
 
@@ -79,7 +72,7 @@ export function transformSelect(
             case `ArrayExpression`:
                 return expression.body.elements.map(
                     (element, index) => processColumn(element, String(index))
-                );
+                ).flat();
             case `ObjectExpression`:
                 return expression.body.properties.map(
                     (property) => {
@@ -89,26 +82,38 @@ export function transformSelect(
                         const name = readName(property.key);
                         return processColumn(property.value, name as string);
                     }
-                );
+                ).flat();
             default:
                 return processColumn(expression.body);
         }
     }
 
-    function processColumn(expression: AstExpression<AstExpressionTypeKey>, name = SCALAR_NAME): Column {
+    function processColumn(expression: AstExpression<AstExpressionTypeKey>, name = SCALAR_NAME): Column | Column[] {
         switch (expression.type) {
-            case `Identifier`:
+            case `Identifier`: {
+                const source = sourceMap[expression.name as string];
+                if (source && name === SCALAR_NAME && source instanceof SelectExpression || source instanceof SourceExpression) {
+                    // We have a single identifier which is a source,
+                    //  we need to return columns for all it's scalar types
+                    return asArray(source.columns).filter(
+                        (column) => isScalar(column.type)
+                    );
+                }
+            }
+            break;
             case `MemberExpression`:
             case `CallExpression`:
+            case `Literal`:
+            case `TemplateLiteral`:
                 break;
             default:
                 throw new Error(`Unsupported column Expression.type "${expression.type}"`);
         }
 
         const { expression: exp, linkMap } = convert(
-            sources,
+            sourceMap,
             expression,
-            varsName,
+            vars,
             globals,
         );
 

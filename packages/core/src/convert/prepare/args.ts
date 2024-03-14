@@ -33,6 +33,9 @@ export function bindVars(expression: Expression<`ArrowFunctionExpression`>, coun
     // Remove the vars param
     expression.params.length = count;
 
+    // TODO: Don't think this is required anymore...
+
+    /*
     const varsName = lastParam.name;
     walk(expression.body, (exp) => {
         if (exp.type !== ExpressionType.ExternalExpression) {
@@ -203,4 +206,5 @@ export function bindVars(expression: Expression<`ArrowFunctionExpression`>, coun
             }
         }
     }
+    */
 }

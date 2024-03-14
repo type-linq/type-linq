@@ -26,6 +26,7 @@ import { Expression, ExpressionType } from '../../core/src/tree/expression';
 import { GlobalExpression } from '../../core/src/tree/global';
 import { CallExpression } from '../../core/src/tree/call';
 import { compile } from './compile';
+import { SelectExpression } from '../../core/src/tree';
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;
@@ -49,15 +50,25 @@ export class SqliteProvider extends QueryProvider {
     }
 
     async *execute<TResult>(source: Queryable<TResult>): AsyncGenerator<TResult> {
-        const { sql, variables } = this.compile(source);
+        const expression = source.expression instanceof SelectExpression ?
+            source.expression.applyImplicitJoins() :
+            source.expression;
+
+        const { sql, variables } = this.compile(expression);
+
+        console.log(`Executing SQL`);
+        console.log(sql);
+        console.log(variables);
+        console.log(`=======================================`);
+
         const results = await this.run<TResult>(sql, variables);
         for (const result of results) {
             yield result;
         }
     }
 
-    compile(source: Queryable<unknown>) {
-        const { sql, variables } = compile(source.expression);
+    compile(expression: Expression<ExpressionType>) {
+        const { sql, variables } = compile(expression);
         return { sql, variables };
     }
 
