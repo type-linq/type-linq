@@ -7,24 +7,33 @@ on:
 
 jobs:
   release:
+    # TODO: Turn on once ready
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - uses: actions/checkout@v3
+      - name: Create Core Release
+        uses: elgohr/Github-Release-Action@v5
+        id: create_release_core
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
-          draft: false
-          prerelease: false
+          title: "Core"
+          workdir: "packages/core"
+      - name: Create Sqlite Release
+        uses: elgohr/Github-Release-Action@v5
+        id: create_release_sqlite
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          title: "Sqlite"
+          workdir: "packages/sqlite"
 
   publish:
+    # TODO: Turn on once ready
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -49,8 +58,8 @@ jobs:
         with:
           node-version: '20.x'
           registry-url: 'https://npm.pkg.github.com'
-          scope: '@arch1t3c7'
+          scope: '@type-linq'
       - name: Publish to GitHub Packages
-        run: npm publish
+        run: npm publish --workspaces
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
