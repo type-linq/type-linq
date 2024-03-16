@@ -1,4 +1,4 @@
-import { fetchSources, readName } from './util';
+import { readName } from './util';
 import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type';
 import { walk } from '../walk';
 import { Globals, isGlobalIdentifier, mapGlobal, mapGlobalAccessor } from './global';
@@ -6,21 +6,17 @@ import {
     BinaryExpression,
     BinaryOperator,
     CallExpression,
-    ExpressionType,
-    GlobalExpression,
+    GlobalIdentifier,
     Literal,
     LogicalExpression,
     LogicalOperator,
     Expression as QueryExpression,
-    SelectExpression,
     SourceExpression,
     TernaryExpression,
     UnaryExpression,
-    UnionType,
     VariableExpression,
-    asArray
-} from '../tree/index';
-export type Sources = Record<string | symbol, QueryExpression<ExpressionType>>;
+} from '@type-linq/query-tree';
+export type Sources = Record<string | symbol, QueryExpression>;
 
 export function convert(
     sources: Sources,
@@ -28,17 +24,10 @@ export function convert(
     varsName?: string | symbol,
     globals?: Globals,
     args?: Serializable,
-): { expression: QueryExpression<ExpressionType>, linkMap: Map<SourceExpression, SourceExpression[]> } {
-    // TODO: We need some additional information here...
-    //  We need to figur out the way the 2 sources map together....
-    const linkMap = new Map<SourceExpression, SourceExpression[]>();
+): QueryExpression {
+    return process(expression);
 
-    return {
-        linkMap,
-        expression: process(expression),
-    }
-
-    function process(expression: Expression<ExpressionTypeKey>): QueryExpression<ExpressionType> {
+    function process(expression: Expression<ExpressionTypeKey>): QueryExpression {
         switch (expression.type) {
             case `ExternalExpression`:
                 return processExternal(expression);
@@ -157,7 +146,7 @@ export function convert(
         }
     }
 
-    function processIdentifier(expression: Expression<`Identifier`>): QueryExpression<ExpressionType> {
+    function processIdentifier(expression: Expression<`Identifier`>): QueryExpression {
         if (expression.name === `undefined`) {
             return new Literal(null);
         }
@@ -208,7 +197,7 @@ export function convert(
         return new VariableExpression(path.slice(1), args);
     }
 
-    function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression<ExpressionType> {
+    function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression {
         if (expression.callee.type !== `MemberExpression`) {
             throw new Error(`Expected CallExpression to always act on a MemberExpression`);
         }
@@ -225,7 +214,7 @@ export function convert(
         return exp;
     }
 
-    function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression<ExpressionType> {
+    function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression {
         const source = process(expression.object);
         const name = readName(expression.property);
 
@@ -233,10 +222,10 @@ export function convert(
             throw new Error(`Unexpected symbol property name`);
         }
 
-        if (source instanceof GlobalExpression) {
+        if (source instanceof GlobalIdentifier) {
             // This should have been handled above?
             //  How would we apply a property to a global expression anyway?
-            throw new Error(`Unexpected GloblExpression`);
+            throw new Error(`Unexpected GlobalIdentifier`);
         }
 
         // Any time the source is a call expression we are going to
@@ -249,43 +238,22 @@ export function convert(
             }
             return exp;
         }
+        
 
-        const sources = fetchSources(source);
         const result = processAccess(source, name);
-
-        if (result instanceof SourceExpression === true) {
-            for (const source of sources) {
-                if (result.name !== source.name) {
-                    if (linkMap.has(source)) {
-                        linkMap.get(source)!.push(result);
-                    } else {
-                        linkMap.set(source, [result]);
-                    }
-                }
-            }
-        }
-
         return result;
     }
 
-    function processAccess(source: QueryExpression<ExpressionType>, name: string) {
-        if (source instanceof SourceExpression || source instanceof SelectExpression) {
-            const sourceColumn = asArray(source.columns).find(
-                (column) => column.name === name
-            );
+    function processAccess(source: QueryExpression, name: string) {
+        if (source instanceof SourceExpression) {
+            const sourceField = source.field(name);
 
-            if (sourceColumn) {
-                return sourceColumn.expression;
+            if (sourceField) {
+                return sourceField;
             }
         }
 
-        if(source.type instanceof UnionType) {
-            // TODO: Implament union types.
-            //  They will need to make sure the accessor is valid for all branches.
-            throw new Error(`Accessors onto union types are not currently supported`);
-        }
-
-        if (name in source.type === false) {
+        if (source.type[name] === undefined) {
             throw new Error(`Unable to find identifier "${name}" on source`);
         }
 

@@ -1,18 +1,21 @@
+import {
+    Alias,
+    AliasSource,
+    Expression,
+    JoinClause,
+    JoinExpression,
+    SelectExpression,
+} from '@type-linq/query-tree';
+
 import { convert } from '../convert/convert';
-import { randString, readName } from '../convert/util';
+import { readName } from '../convert/util';
 import { Queryable } from './queryable';
 import { Expression as AstExpression } from '../type';
-import { Expression, ExpressionType } from '../tree/expression';
 import { Merge, Map as ValueMap, Serializable, ExpressionTypeKey } from '../type';
 import { parseFunction } from './parse';
-import { SourceExpression } from '../tree/source';
-import { SelectExpression } from '../tree/select';
 import { Globals } from '../convert/global';
-import { JoinClause, JoinExpression } from '../tree/join';
-import { Column } from '../tree/column';
 import { SCALAR_NAME, transformSelect } from './select';
-import { asArray, joinExists } from '../tree/util';
-import { buildSources, expressionSource, replaceSource, varsName } from './util';
+import { asArray, buildSources, varsName } from './util';
 
 // TODO: Add override that will take inner and 2 functions...
 //  1. A function that will return a logical expression used to join
@@ -26,16 +29,9 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
     result: Merge<TOuter, TInner, TResult>,
     args?: TArgs,
 ): Queryable<TResult> {
-    if (this.expression instanceof SourceExpression === false && this.expression instanceof SelectExpression === false) {
-        throw new Error(`Expected outer expression to be a SourceExpression or a SelectExpression`);
-    }
-
-    if (inner.expression instanceof SourceExpression === false && inner.expression instanceof SelectExpression === false) {
-        throw new Error(`Expected inner expression to be a SourceExpression or a SelectExpression`);
-    }
 
     const outerExpression = this.expression;
-    let innerExpression = inner.expression;
+    const innerExpression = inner.expression;
 
     const outerAst = parseFunction(outerKey, 1, args);
     const innerAst = parseFunction(innerKey, 1, args);
@@ -61,65 +57,58 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
         )
     );
 
-    const innerSourceExpression = expressionSource(innerExpression);
-    let hasExisting = false;
-    if (outerExpression instanceof SelectExpression) {
-        for (const join of outerExpression.join) {
-            const jsource = expressionSource(join.source);
-            if (innerSourceExpression.resource === jsource.resource) {
-                hasExisting = true;
-                break;
-            }
+    const joinExpression = new JoinExpression(
+        outerExpression,
+        innerExpression,
+        clauses
+    );
+
+    // Check if join exists
+    const existing = Expression.walkBranchFind(outerExpression, (exp) => {
+        if (exp instanceof JoinExpression === false) {
+            return false;
+        }
+
+        // Check if everything except the source matches (since it is in
+        //  the same branch, the underlying source is the same)
+        return innerExpression.isEqual(joinExpression, `source`);
+    });
+
+    let source = outerExpression;
+    if (!existing) {
+        source = joinExpression;
+
+        const from = Expression.source(joinExpression.joined);
+        const froms = Expression.sources(outerExpression).filter(
+            (f) => f.entity.name === from.entity.name
+        );
+
+        if (froms.length) {
+            source  = new JoinExpression(
+                joinExpression.source,
+                new AliasSource(
+                    joinExpression.joined,
+                    `${from.entity.name}_${froms.length}`
+                ),
+                joinExpression.join,
+            );
         }
     }
 
-    if (hasExisting) {
-        // Note: We use the resource to avoid growing names
-        const name = `${innerSourceExpression.resource}_${randString(4)}`;
-        innerExpression = replaceSource(
-            innerExpression,
-            (existing) => new SourceExpression(
-                existing.resource,
-                existing.columns,
-                name,
-            )
-        );
-    }
-
-    const join = new JoinExpression(
-        innerExpression,
-        clauses,
-    );
-
-    const columns = transformSelect(
-        [outerExpression, innerExpression],
+    // Apply the select
+    const fields = transformSelect(
+        [source, innerExpression],
         resultAst,
         this.provider.globals,
     );
 
-    let select: SelectExpression;
-    if (outerExpression instanceof SourceExpression) {
-        select = new SelectExpression(columns, outerExpression, undefined, [join]);
-    } else if (outerExpression instanceof SelectExpression) {
-        const joins = joinExists(outerExpression.join, join) ?
-            outerExpression.join :
-            [...outerExpression.join, join];
-        select = new SelectExpression(
-            columns,
-            outerExpression.source,
-            outerExpression.where,
-            joins,
-        );
-    } else {
-        throw new Error(`Expected either a source expression or a select expression`);
-    }
-
+    const select = new SelectExpression(source, fields);
     return new Queryable<TResult>(
         this.provider,
         select,
     );
 
-    function processKey(expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression<ExpressionType>[]) {
+    function processKey(expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]) {
         const sourceMap = buildSources(expression, ...sources);
         const vars = varsName(expression);
 
@@ -147,7 +136,7 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
         expression: AstExpression<ExpressionTypeKey>,
         name: string,
         varsName: string | undefined,
-        sources: Record<string, Expression<ExpressionType>>,
+        sources: Record<string, Expression>,
     ) {
         switch (expression.type) {
             case `Identifier`:
@@ -168,6 +157,9 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
             args,
         );
 
-        return new Column(converted.expression, name, converted.linkMap);
+        return new Alias(
+            converted,
+            name,
+        );
     }
 }

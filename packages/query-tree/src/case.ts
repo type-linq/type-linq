@@ -1,14 +1,14 @@
-import { Expression, ExpressionType } from './expression';
+import { Expression } from './expression';
 import { Type, UnionType } from './type';
 
 export class CaseBlock extends Expression<`CaseBlock`> {
     expressionType = `CaseBlock` as const;
     type: Type;
 
-    test: Expression<ExpressionType>;
-    consequent: Expression<ExpressionType>;
+    test: Expression;
+    consequent: Expression;
 
-    constructor(test: Expression<ExpressionType>, consequent: Expression<ExpressionType>) {
+    constructor(test: Expression, consequent: Expression) {
         super();
         this.test = test;
         this.consequent = consequent;
@@ -21,9 +21,9 @@ export class CaseExpression extends Expression<`CaseExpression`> {
     type: Type;
 
     when: CaseBlock[];
-    alternate: Expression<ExpressionType>;
+    alternate: Expression;
 
-    constructor(when: CaseBlock[], alternate: Expression<ExpressionType>) {
+    constructor(when: CaseBlock[], alternate: Expression) {
         super();
         this.when = when;
         this.alternate = alternate;

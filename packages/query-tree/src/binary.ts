@@ -1,4 +1,4 @@
-import { Expression, ExpressionType } from './expression';
+import { Expression } from './expression';
 import { BooleanType, NumberType, Type } from './type';
 
 export type EqualityOperator = `==` | `!=`;
@@ -12,12 +12,12 @@ export abstract class BinaryExpressionBase<
     TExpression extends string,
     TOperator extends BinaryOperator,
 > extends Expression<TExpression> {
-    left: Expression<ExpressionType>;
+    left: Expression;
     operator: TOperator;
-    right: Expression<ExpressionType>;
+    right: Expression;
     type: Type;
 
-    constructor(left: Expression<ExpressionType>, operator: TOperator, right: Expression<ExpressionType>) {
+    constructor(left: Expression, operator: TOperator, right: Expression) {
         super();
         this.left = left;
         this.operator = operator;

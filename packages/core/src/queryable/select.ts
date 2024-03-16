@@ -1,3 +1,4 @@
+import { Alias, Expression, Field, SelectExpression, SourceExpression } from '@type-linq/query-tree';
 import { convert } from '../convert/convert';
 import { readName } from '../convert/util';
 import { Queryable } from './queryable';
@@ -7,12 +8,8 @@ import {
     Map
 } from '../type';
 import { parseFunction } from './parse';
-import { SourceExpression } from '../tree/source';
-import { SelectExpression } from '../tree/select';
 import { Globals } from '../convert/global';
-import { Column } from '../tree/column';
 import { buildSources, varsName } from './util';
-import { asArray, isScalar } from '../tree';
 
 export const SCALAR_NAME = `__scalar__11cbd49f`;
 
@@ -23,31 +20,23 @@ export function select<TElement, TMapped, TArgs = undefined>(
 ) {
     const ast = parseFunction(map, 1, args);
 
-    let select: SelectExpression;
-    if (this.expression instanceof SourceExpression) {
-        const columns = transformSelect(
-            [this.expression],
-            ast,
-            this.provider.globals,
-        );
-        select = new SelectExpression(columns, this.expression);
-    } else if (this.expression instanceof SelectExpression) {
-        const columns = transformSelect(
-            [this.expression],
-            ast,
-            this.provider.globals,
-        );
+    const fields = transformSelect(
+        [this.expression],
+        ast,
+        this.provider.globals,
+    );
 
-        select = new SelectExpression(
-            columns,
-            this.expression.source,
-            this.expression.where,
-            this.expression.join,
-        );
-    } else {
-        throw new Error(`Expected either a source expression or a select expression`);
-    }
+    // Now we need to remove any other select in the main branch
+    const expression = Expression.walkBranchMutate(this.expression, (exp) => {
+        if (exp instanceof SelectExpression) {
+            return exp.source;
+        } else {
+            return exp;
+        }
+    });
 
+    // Finally add a new select
+    const select = new SelectExpression(expression, fields);
     return new Queryable<TMapped>(
         this.provider,
         select,
@@ -55,23 +44,20 @@ export function select<TElement, TMapped, TArgs = undefined>(
 }
 
 export function transformSelect(
-    sources: (SelectExpression | SourceExpression)[],
+    sources: SourceExpression[],
     expression: AstExpression<`ArrowFunctionExpression`>,
     globals?: Globals,
-): Column | Column[] {
-    // TODO: If this select ends on a select expression, we need to get the scalar columns
-    //  and add them
-
+): Field | Field[] {
     const vars = varsName(expression);
     const sourceMap = buildSources(expression, ...sources);
-    const columns = processColumns();
-    return columns;
+    const fields = processFields();
+    return fields;
 
-    function processColumns() {
+    function processFields() {
         switch (expression.body.type) {
             case `ArrayExpression`:
                 return expression.body.elements.map(
-                    (element, index) => processColumn(element, String(index))
+                    (element, index) => processField(element, String(index))
                 ).flat();
             case `ObjectExpression`:
                 return expression.body.properties.map(
@@ -80,24 +66,21 @@ export function transformSelect(
                             throw new Error(`Expected ObjectExpression.properties to all be "Property" Expressions`);
                         }
                         const name = readName(property.key);
-                        return processColumn(property.value, name as string);
+                        return processField(property.value, name as string);
                     }
                 ).flat();
             default:
-                return processColumn(expression.body);
+                return processField(expression.body);
         }
     }
 
-    function processColumn(expression: AstExpression<AstExpressionTypeKey>, name = SCALAR_NAME): Column | Column[] {
+    function processField(expression: AstExpression<AstExpressionTypeKey>, name = SCALAR_NAME): Field | Field[] {
         switch (expression.type) {
             case `Identifier`: {
+                // We have a single identifier which is a source
                 const source = sourceMap[expression.name as string];
-                if (source && name === SCALAR_NAME && source instanceof SelectExpression || source instanceof SourceExpression) {
-                    // We have a single identifier which is a source,
-                    //  we need to return columns for all it's scalar types
-                    return asArray(source.columns).filter(
-                        (column) => isScalar(column.type)
-                    );
+                if (source && name === SCALAR_NAME && source instanceof SourceExpression) {
+                    return new Alias(source, name);
                 }
             }
             break;
@@ -110,14 +93,14 @@ export function transformSelect(
                 throw new Error(`Unsupported column Expression.type "${expression.type}"`);
         }
 
-        const { expression: exp, linkMap } = convert(
+        const converted = convert(
             sourceMap,
             expression,
             vars,
             globals,
         );
 
-        return new Column(exp, name, linkMap);
+        return new Alias(converted, name);
     }
 }
 

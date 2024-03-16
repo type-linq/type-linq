@@ -1,18 +1,22 @@
-import { CallExpression } from '../tree/call';
-import { GlobalExpression } from '../tree/global';
-import { ExpressionType, Expression as QueryExpression } from '../tree/expression';
-import { Type, isScalar } from '../tree/type';
+import {
+    CallExpression,
+    GlobalIdentifier,
+    Expression as QueryExpression,
+    Type,
+    isScalar,
+} from '@type-linq/query-tree';
+
 import { Expression, ExpressionTypeKey } from '../type';
 import { expressionRoot, walkLeaf } from '../walk';
 import { readName } from './util';
 
 export type Globals = {
     // TODO: We have no way to exclude identifiers!
-    mapIdentifier(...path: string[]): GlobalExpression | undefined;
-    mapAccessor(type: Type, object: QueryExpression<ExpressionType>, name: string | symbol, args: QueryExpression<ExpressionType>[]): GlobalExpression | CallExpression | undefined;
+    mapIdentifier(...path: string[]): GlobalIdentifier | undefined;
+    mapAccessor(type: Type, object: QueryExpression, name: string | symbol, args: QueryExpression[]): GlobalIdentifier | CallExpression | undefined;
 };
 
-export function mapGlobal(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals): GlobalExpression {
+export function mapGlobal(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals): GlobalIdentifier {
     const source = expressionRoot(expression);
     if (!isGlobalIdentifier(source, globals)) {
         throw new Error(`Expected an expression with a global at it's source to be supplied`);
@@ -66,9 +70,9 @@ export function isGlobalIdentifier(expression: Expression<ExpressionTypeKey>, gl
 }
 
 export function mapGlobalAccessor(
-    object: QueryExpression<ExpressionType>,
+    object: QueryExpression,
     name: string | symbol,
-    args: QueryExpression<ExpressionType>[],
+    args: QueryExpression[],
     globals?: Globals
 ) {
     if (!globals) {

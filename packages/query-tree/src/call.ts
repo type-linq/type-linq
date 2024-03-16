@@ -1,14 +1,14 @@
-import { Expression, ExpressionType } from './expression';
+import { Expression } from './expression';
 import { Type } from './type';
 
 export class CallExpression extends Expression<`CallExpression`> {
     expressionType = `CallExpression` as const;
-    callee: Expression<ExpressionType>;
-    arguments: Expression<ExpressionType>[];
+    callee: Expression;
+    arguments: Expression[];
     type: Type;
     
 
-    constructor(type: Type, callee: Expression<ExpressionType>, args: Expression<ExpressionType>[] = []) {
+    constructor(type: Type, callee: Expression, args: Expression[] = []) {
         super();
         this.type = type;
         this.callee = callee;
