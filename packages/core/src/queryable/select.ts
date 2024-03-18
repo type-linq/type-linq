@@ -1,15 +1,15 @@
-import { Alias, Expression, Field, SelectExpression, SourceExpression } from '@type-linq/query-tree';
-import { convert } from '../convert/convert';
-import { readName } from '../convert/util';
-import { Queryable } from './queryable';
+import { Alias, Field, FieldIdentifier, SelectExpression, SourceExpression, Walker } from '@type-linq/query-tree';
+import { convert } from '../convert/convert.js';
+import { readName } from '../convert/util.js';
+import { Queryable } from './queryable.js';
 import {
     Expression as AstExpression,
     ExpressionTypeKey as AstExpressionTypeKey,
     Map
-} from '../type';
-import { parseFunction } from './parse';
-import { Globals } from '../convert/global';
-import { buildSources, varsName } from './util';
+} from '../type.js';
+import { parseFunction } from './parse.js';
+import { Globals } from '../convert/global.js';
+import { buildSources, varsName } from './util.js';
 
 export const SCALAR_NAME = `__scalar__11cbd49f`;
 
@@ -27,7 +27,7 @@ export function select<TElement, TMapped, TArgs = undefined>(
     );
 
     // Now we need to remove any other select in the main branch
-    const expression = Expression.walkBranchMutate(this.expression, (exp) => {
+    const expression = Walker.walkBranchMutate(this.expression, (exp) => {
         if (exp instanceof SelectExpression) {
             return exp.source;
         } else {
@@ -80,7 +80,7 @@ export function transformSelect(
                 // We have a single identifier which is a source
                 const source = sourceMap[expression.name as string];
                 if (source && name === SCALAR_NAME && source instanceof SourceExpression) {
-                    return new Alias(source, name);
+                    return new FieldIdentifier(source, name);
                 }
             }
             break;

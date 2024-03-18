@@ -1,7 +1,7 @@
-import { SqliteProvider } from './src/provider';
-import { SqliteQueryableSource } from './src/queryable';
-import { buildSources } from './src/sources';
-import { DatabaseSchema, buildSchemaFile, fetchSchema } from './src/schema';
+import { SqliteProvider } from './src/provider.js';
+import { SqliteQueryableSource } from './src/queryable.js';
+import { buildSources } from './src/sources.js';
+import { DatabaseSchema, buildSchemaFile, fetchSchema } from './src/schema.js';
 
 const DB = `D:\\Projects\\type-linq\\packages\\sqlite\\resources\\northwind.db`;
 

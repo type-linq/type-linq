@@ -1,4 +1,4 @@
-import { Expression, ExpressionTypeKey } from '../type';
+import { Expression, ExpressionTypeKey } from '../type.js';
 
 export function readName(expression: Expression<ExpressionTypeKey>) {
     if (expression.type !== `Identifier` && expression.type !== `Literal`) {

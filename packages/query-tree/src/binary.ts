@@ -1,5 +1,5 @@
-import { Expression } from './expression';
-import { BooleanType, NumberType, Type } from './type';
+import { Expression } from './expression.js';
+import { BooleanType, NumberType, Type } from './type.js';
 
 export type EqualityOperator = `==` | `!=`;
 export type ComparisonOperator = `<` | `>` | `<=` | `>=`;

@@ -1,5 +1,5 @@
-import { Expression } from './expression';
-import { Type, UnionType } from './type';
+import { Expression } from './expression.js';
+import { Type, UnionType } from './type.js';
 
 export class CaseBlock extends Expression<`CaseBlock`> {
     expressionType = `CaseBlock` as const;

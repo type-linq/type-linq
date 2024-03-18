@@ -1,6 +1,6 @@
 import cloneDeep from 'lodash.clonedeep';
-import { Expression } from './expression';
-import { BooleanType, DateType, NullType, NumberType, StringType, Type, scalarUnion } from './type';
+import { Expression } from './expression.js';
+import { BooleanType, DateType, NullType, NumberType, StringType, Type, scalarUnion } from './type.js';
 
 export class VariableExpression<TBound = unknown> extends Expression<`VariableExpression`> {
     expressionType = `VariableExpression` as const;

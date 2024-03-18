@@ -1,5 +1,5 @@
-import { Expression } from '../../type';
-import { ensureIdentifierParams } from './identifier-params';
+import { Expression } from '../../type.js';
+import { ensureIdentifierParams } from './identifier-params.js';
 
 export function bindVars(expression: Expression<`ArrowFunctionExpression`>, count: number, args: unknown) {
     if (args !== null && typeof args === `object` && expression.params.length <= count) {

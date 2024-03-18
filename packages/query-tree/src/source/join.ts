@@ -1,7 +1,7 @@
-import { BinaryExpressionBase } from '../binary';
-import { Expression } from '../expression';
-import { SourceExpression } from './source';
-import { Type } from '../type';
+import { BinaryExpressionBase } from '../binary.js';
+import { Expression } from '../expression.js';
+import { SourceExpression } from './source.js';
+import { Type } from '../type.js';
 
 export class JoinClause extends BinaryExpressionBase<`JoinClause`, `==`> {
     expressionType = `JoinClause` as const;

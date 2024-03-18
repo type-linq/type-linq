@@ -6,9 +6,9 @@ import {
     isScalar,
 } from '@type-linq/query-tree';
 
-import { Expression, ExpressionTypeKey } from '../type';
-import { expressionRoot, walkLeaf } from '../walk';
-import { readName } from './util';
+import { Expression, ExpressionTypeKey } from '../type.js';
+import { expressionRoot, walkLeaf } from '../walk.js';
+import { readName } from './util.js';
 
 export type Globals = {
     // TODO: We have no way to exclude identifiers!
@@ -71,7 +71,7 @@ export function isGlobalIdentifier(expression: Expression<ExpressionTypeKey>, gl
 
 export function mapGlobalAccessor(
     object: QueryExpression,
-    name: string | symbol,
+    name: string,
     args: QueryExpression[],
     globals?: Globals
 ) {
@@ -79,7 +79,7 @@ export function mapGlobalAccessor(
         return undefined;
     }
 
-    if (!isScalar(object.type)) {
+    if (!object.type[name] || !isScalar(object.type[name]!)) {
         throw new Error(`Can only map global accessors to scalar types`);
     }
 

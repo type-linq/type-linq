@@ -1,4 +1,4 @@
-import { expressionKeys, Expression, ExpressionTypeKey } from './type';
+import { expressionKeys, Expression, ExpressionTypeKey } from './type.js';
 
 export function walk(expression: Expression<ExpressionTypeKey>, visit: (expression: Expression<ExpressionTypeKey>) => boolean) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

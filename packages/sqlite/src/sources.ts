@@ -1,96 +1,56 @@
-import objectHash from 'object-hash';
-
 import {
-    Column,
-    Expression,
-    SourceExpression,
     BinaryType,
     NumberType,
     StringType,
+    FromExpression,
+    EntityIdentifier,
+    LinkField,
     EntityType,
-    Identifier,
-} from '@type-linq/core';
+} from '@type-linq/query-tree';
 
-import { DatabaseSchema, TableSchema } from './schema';
+import { DatabaseSchema } from './schema.js';
 
 export function buildSources(schema: DatabaseSchema) {
-    const sources: Record<string, SourceExpression> = {};
+    const sources: Record<string, FromExpression> = {};
 
     // Add the scalar columns
     for (const [name, table] of Object.entries(schema.tables)) {
-        const columns = buildColumns(table);
-        sources[name] = new SourceExpression(name, columns);
+        const type = new EntityType(
+            Object.fromEntries(
+                Object.entries(table.columns).map(
+                    ([name, dbType]) => [name, createType(dbType)]
+                )
+            )
+        );
+
+        const entity = new EntityIdentifier(table.name, type);
+        const from = new FromExpression(entity);
+        sources[name] = from;
+
+        for (const [name] of Object.entries(table.columns)) {
+            from.scalar(name);
+        }
     }
 
-    //  1. Make all matching entity types the same type object
-    const typeCache: Record<string, EntityType> = {};
-    for (const table of Object.values(sources)) {
-        Expression.walk(table, (exp) => {
-            if (exp.type instanceof EntityType === false) {
-                return;
-            }
-
-            const hash = objectHash(exp.type);
-            if (typeCache[hash]) {
-                exp.type = typeCache[hash];
-            } else {
-                typeCache[hash] = exp.type;
-            }
-        });
-    }
-
-    //  2. Add all required link columns
+    // Add the links
     for (const [name, table] of Object.entries(schema.tables)) {
-        const links = buildLinkColumns(sources, table);
-        // Note: This will update the entity types directly
-        sources[name].addColumns(links);
-    }
-
-    //  4. Call link on the sources
-    for (const [name, source] of Object.entries(sources)) {
-        const table = schema.tables[name];
-        for (const link of Object.values(table.links)) {
-            const linkTable = schema.tables[link.table];
-
-            const columns = Object.entries(link.columns).map(([outerName, innerName]) => {
-                const outerType = createType(table.columns[outerName]);
-                const innerType = createType(linkTable.columns[innerName]);
+        for (const [linkName, { table: tbl, columns }] of Object.entries(table.links)) {
+            const linkFields: LinkField[] = Object.entries(columns).map(([sourceName, joinedName]) => {
                 return {
-                    outerName: outerName,
-                    outerType: outerType,
-                    innerName: innerName,
-                    innerType: innerType,
-                };
+                    joinedName,
+                    sourceName,
+                }
             });
-            source.link(sources[link.table], columns);
+
+            sources[name].link(
+                linkName,
+                sources[tbl],
+                linkFields,
+            );
         }
     }
 
     return sources;
-}
-
-function buildColumns(schema: TableSchema) {
-    const columns = Object.entries(schema.columns).map(
-        ([name, dbType]) => {
-            const type = createType(dbType);
-            const identifier = new Identifier(name, type, schema.name);
-            return new Column(identifier, name);
-        }
-    );
-    return columns;
-}
-
-function buildLinkColumns(sources: Record<string, SourceExpression>, schema: TableSchema) {
-    const columns = Object.entries(schema.links).map(
-        ([name, { table }]) => {
-            const source = sources[table];
-            if (source === undefined) {
-                throw new Error(`Unable to find table "${table}" on sources`);
-            }
-            return new Column(source, name);
-        }
-    );
-    return columns;
 }
 
 function createType(dbType: string) {

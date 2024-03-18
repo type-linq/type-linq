@@ -1,5 +1,5 @@
-import { Expression } from './expression';
-import { BooleanType, NullType, NumberType, StringType, Type } from './type';
+import { Expression } from './expression.js';
+import { BooleanType, NullType, NumberType, StringType, Type } from './type.js';
 
 export class Literal extends Expression<`Literal`> {
     expressionType = `Literal` as const;

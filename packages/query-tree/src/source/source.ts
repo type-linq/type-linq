@@ -1,12 +1,9 @@
-import { Alias, FieldIdentifier } from '../identifier';
-import { Expression, SourceExpressionType } from '../expression';
-import { EntityType, Fields, Type } from '../type';
-import { JoinExpression } from './join';
-import { SelectExpression } from './select';
-import { readName } from '../util';
+import { Alias, FieldIdentifier } from '../identifier.js';
+import { Expression, SourceExpressionType } from '../expression.js';
+import { EntityType, Fields, Type } from '../type.js';
+import { readName } from '../util.js';
 
-
-export type Field = Alias<Expression> | FieldIdentifier;
+export type Field = FieldIdentifier | Alias<Expression>;
 
 export abstract class SourceExpression<TType extends SourceExpressionType = SourceExpressionType> extends Expression<TType> {
     abstract fields: Field[] | Field;
@@ -14,7 +11,10 @@ export abstract class SourceExpression<TType extends SourceExpressionType = Sour
     #source?: SourceExpression;
     #type?: Type;
 
-    get type() {
+    get type(): Type {
+        // TODO: The only time we need to get this type like this
+
+        // TODO: This is causing circular ref issues...
         if (this.#type) {
             return this.#type;
         }
@@ -64,55 +64,7 @@ export abstract class SourceExpression<TType extends SourceExpressionType = Sour
         );
     }
 
-    scalar(name: string, type: Type) {
-        if (Array.isArray(this.fields) === false) {
-            throw new Error(`Cannot add fields to a scalar source`);
-        }
-
-        const field = new FieldIdentifier(this, name);
-        this.fields.push(field);
-    }
-
-    finalize(forceSelect = true, forceScalars = false): SourceExpression {
-        let select: SelectExpression | undefined = undefined;
-        const expression = Expression.walkBranchMutate(this, (exp) => {
-            if (exp instanceof JoinExpression) {
-                return new JoinExpression(
-                    exp.source,
-                    exp.joined.finalize(false, forceScalars),
-                    exp.join,
-                );
-            }
-
-            if (exp instanceof SelectExpression) {
-                select = exp;
-                return select.source;
-            }
-
-            return exp;
-        });
-
-        if (expression instanceof SelectExpression === false && forceSelect === false) {
-            return expression;
-        }
-
-        if (select === undefined && forceSelect) {
-            select = new SelectExpression(
-                expression,
-                expression.fields,
-            );
-        } else if (select) {
-            select = new SelectExpression(
-                expression,
-                (select as SelectExpression).fields,
-            );
-        }
-
-        if (select === undefined) {
-            return expression;
-        }
-
-        const result = select.applyFieldJoins();
-        return result;
+    protected clearTypeCache() {
+        this.#type = undefined;
     }
 }

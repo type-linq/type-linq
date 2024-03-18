@@ -1,21 +1,21 @@
 import {
     Alias,
-    AliasSource,
     Expression,
     JoinClause,
     JoinExpression,
     SelectExpression,
+    Walker,
 } from '@type-linq/query-tree';
 
-import { convert } from '../convert/convert';
-import { readName } from '../convert/util';
-import { Queryable } from './queryable';
-import { Expression as AstExpression } from '../type';
-import { Merge, Map as ValueMap, Serializable, ExpressionTypeKey } from '../type';
-import { parseFunction } from './parse';
-import { Globals } from '../convert/global';
-import { SCALAR_NAME, transformSelect } from './select';
-import { asArray, buildSources, varsName } from './util';
+import { convert } from '../convert/convert.js';
+import { readName } from '../convert/util.js';
+import { Queryable } from './queryable.js';
+import { Expression as AstExpression } from '../type.js';
+import { Merge, Map as ValueMap, Serializable, ExpressionTypeKey } from '../type.js';
+import { parseFunction } from './parse.js';
+import { Globals } from '../convert/global.js';
+import { SCALAR_NAME, transformSelect } from './select.js';
+import { asArray, buildSources, varsName } from './util.js';
 
 // TODO: Add override that will take inner and 2 functions...
 //  1. A function that will return a logical expression used to join
@@ -64,36 +64,17 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
     );
 
     // Check if join exists
-    const existing = Expression.walkBranchFind(outerExpression, (exp) => {
+    const existing = Walker.walkBranchFind(outerExpression, (exp) => {
         if (exp instanceof JoinExpression === false) {
             return false;
         }
 
         // Check if everything except the source matches (since it is in
         //  the same branch, the underlying source is the same)
-        return innerExpression.isEqual(joinExpression, `source`);
+        return exp.isEqual(joinExpression, `source`);
     });
 
-    let source = outerExpression;
-    if (!existing) {
-        source = joinExpression;
-
-        const from = Expression.source(joinExpression.joined);
-        const froms = Expression.sources(outerExpression).filter(
-            (f) => f.entity.name === from.entity.name
-        );
-
-        if (froms.length) {
-            source  = new JoinExpression(
-                joinExpression.source,
-                new AliasSource(
-                    joinExpression.joined,
-                    `${from.entity.name}_${froms.length}`
-                ),
-                joinExpression.join,
-            );
-        }
-    }
+    const source = existing ? joinExpression : outerExpression;
 
     // Apply the select
     const fields = transformSelect(

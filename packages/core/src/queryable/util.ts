@@ -1,6 +1,6 @@
 import { Expression } from '@type-linq/query-tree';
-import { readName } from '../convert/util';
-import { Expression as AstExpression } from '../type';
+import { readName } from '../convert/util.js';
+import { Expression as AstExpression } from '../type.js';
 
 export function buildSources(ast: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]) {
     return sources.reduce(

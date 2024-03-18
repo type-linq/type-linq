@@ -2,75 +2,42 @@ export type Type = StringType | NumberType | BooleanType | NullType | DateType |
 
 export const UNION_TYPES = Symbol(`union-types`);
 
-export type TypeFunction = () => Type;
-
 export class StringType {
-    [name: string]: TypeFunction | Type | undefined;
+    [name: string]: Type | undefined;
 
-    get length() {
-        return new NumberType();
-    }
-
-    startsWith() {
-        return new BooleanType();
-    }
-
-    endsWith() {
-        return new BooleanType();
-    }
-
-    includes() {
-        return new BooleanType();
-    }
-
-    trimStart() {
-        return new StringType();
-    }
-
-    trimEnd() {
-        return new StringType();
-    }
-
-    replace() {
-        return new StringType();
-    }
+    get length() { return new NumberType(); }
+    get startsWith() { return  new FunctionType(new BooleanType()) }
+    get endsWith() { return  new FunctionType(new BooleanType()) }
+    get includes() { return  new FunctionType(new BooleanType()) }
+    get trimStart() { return  new FunctionType(new StringType()) }
+    get trimEnd() { return  new FunctionType(new StringType()) }
+    get replace() { return  new FunctionType(new StringType()) }
 
 }
 
 export class NumberType {
-    [name: string]: TypeFunction | Type | undefined;
-
-    toString() {
-        return new StringType();
-    }
+    [name: string]: Type | undefined;
+    get toString() { return new FunctionType(new StringType()) }
 }
 
 export class BooleanType {
-    [name: string]: TypeFunction | Type | undefined;
-
-    toString() {
-        return new StringType();
-    }
+    [name: string]: Type | undefined;
+    get toString() { return new FunctionType(new StringType()) }
 }
 
 export class DateType {
-    [name: string]: TypeFunction | Type | undefined;
-
-    toString() {
-        return new StringType();
-    }
-
-    valueOf() {
-        return new NumberType();
-    }
+    [name: string]: Type | undefined;
+    get toString() { return new FunctionType(new StringType()) }
+    get valueOf() { return new FunctionType(new NumberType()) }
 }
 
 export class BinaryType {
-    [name: string]: TypeFunction | Type | undefined;
+    [name: string]: Type | undefined;
+    get toString() { return new FunctionType(new StringType()) }
 }
 
 export class NullType {
-    [name: string]: TypeFunction | Type | undefined;
+    [name: string]: Type | undefined;
 }
 
 export class FunctionType {
@@ -101,9 +68,10 @@ export class UnionTypeProxy {
             ownKeys() {
                 return unionTypeKeys(types);
             },
-            get(_, name) {
+            get(target, name) {
                 if (typeof name === `symbol`) {
-                    return undefined;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    return (target as any)[name];
                 }
 
                 const resultTypes: Type[] = [];
@@ -113,19 +81,13 @@ export class UnionTypeProxy {
                     }
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const value = (type as any)[name];
-                    if (typeof value === `function`) {
-                        resultTypes.push(
-                            new FunctionType(
-                                value()
-                            )
-                        );
-                    } else {
-                        resultTypes.push(value);
-                    }
+                    resultTypes.push(value);
                 });
             },
-            set() {
-                throw new Error(`Set not supported`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            set(target: any, name, value) {
+                target[name] = value;
+                return true;
             }
         });
     }
@@ -133,7 +95,7 @@ export class UnionTypeProxy {
 
 export class UnionType extends UnionTypeProxy {
     [UNION_TYPES]: Type[];
-    [name: string]: TypeFunction | Type | undefined;
+    [name: string]: Type | undefined;
 
     constructor(...types: Type[]) {
         const unique = UnionType.unique(...types);
@@ -254,7 +216,7 @@ export function isEqual(t1: Type, t2: Type) {
         }
     }
 
-    return true;
+    return Object.getPrototypeOf(t1) === Object.getPrototypeOf(t2);
 
 }
 

@@ -1,5 +1,5 @@
-import { Expression } from './expression';
-import { Type } from './type';
+import { Expression } from './expression.js';
+import { Type } from './type.js';
 
 export class CallExpression extends Expression<`CallExpression`> {
     expressionType = `CallExpression` as const;

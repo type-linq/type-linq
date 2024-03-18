@@ -1,7 +1,8 @@
-import { Expression } from '../expression';
-import { Alias, FieldIdentifier } from '../identifier';
-import { JoinExpression } from './join';
-import { Field, SourceExpression } from './source';
+import { FieldIdentifier } from '../identifier.js';
+import { JoinExpression } from './join.js';
+import { Field, SourceExpression } from './source.js';
+import { Walker } from '../walker.js';
+import { FromExpression } from './from.js';
 
 export class SelectExpression extends SourceExpression<`SelectExpression`> {
     expressionType = `SelectExpression` as const;
@@ -22,26 +23,75 @@ export class SelectExpression extends SourceExpression<`SelectExpression`> {
     applyFieldJoins(): SelectExpression {
         const implicitJoins: JoinExpression[] = [];
 
-        const fields = Array.isArray(this.fields) ?
-            this.fields.map(processField) :
-            processField(this.fields);
+        // 1. Walk through find every select expression
+        // 2. Mutate walk each of the the fields collecting the joins
+        //  with their aliases and removing them
+        // 3. Search every branch and find the source
+        //  Apply all implicit joins for that source to the branch
+        //  (ensuring any select statement is kept at the top)
 
-        const adjusted = Expression.walkMutate(this, (exp) => {
-            if (exp === this) {
-                return (exp as SelectExpression).source;
-            }
-            if (exp instanceof JoinExpression) {
-                const from = Expression.source(exp);
-                const joins = implicitJoins.filter(
-                    (join) => Expression.source(join.source).isEqual(from)
-                );
-
-                if (joins.length === 0) {
-                    return exp;
+        const expression = Walker.walkMutate(this, (exp, depth) => {
+            if (exp instanceof SelectExpression) {
+                for (const field of exp.fieldsArray) {
+                    Walker.walk(field, (exp) => {
+                        if (exp instanceof FieldIdentifier) {
+                            implicitJoins.push(...exp.implicitJoins);
+                        }
+                    });
                 }
 
-                let current = exp;
-                for (const join of joins) {
+                if (depth > 0) {
+                    return exp.applyFieldJoins();
+                }
+                return exp;                
+            }
+            return exp;
+        }) as SelectExpression;
+
+
+        if (implicitJoins.length === 0) {
+            return this;
+        }
+
+        const adjusted = processChain(expression) as SelectExpression;
+        return adjusted;
+
+        function processChain(source: SourceExpression) {
+            const existingJoins = Walker.collectBranch(source,
+                (exp) => exp instanceof JoinExpression
+            ) as JoinExpression[];
+
+            // Get all joins that need to be applied to this tree
+            const joins = implicitJoins.filter(
+                (join) => Walker.source(join).entity.name === Walker.source(source).entity.name,
+            );
+
+            const filtered = joins.filter(
+                (join) => existingJoins.every(
+                    (existing) => existing.isEqual(join, `source`) === false
+                )
+            );
+
+            for (const join of joins) {
+                const index = implicitJoins.indexOf(join);
+                implicitJoins.splice(index, 1);
+            }
+
+            return Walker.walkBranchMutate(source, (exp): SourceExpression => {
+                if (exp instanceof JoinExpression) {
+                    return new JoinExpression(
+                        exp.source,
+                        processChain(exp.joined),
+                        exp.join,
+                    );
+                }
+
+                if (exp instanceof FromExpression === false) {
+                    return exp;
+                }
+                
+                let current = exp as SourceExpression;
+                for (const join of filtered) {
                     current = new JoinExpression(
                         current,
                         join.joined,
@@ -49,29 +99,40 @@ export class SelectExpression extends SourceExpression<`SelectExpression`> {
                     );
                 }
                 return current;
-            }
-            return exp;
-        });
-
-        return new SelectExpression(
-            adjusted as SourceExpression,
-            fields,
-        );
-
-        function processField(field: Field) {
-            if (field instanceof FieldIdentifier === true) {
-                return field;
-            }
-
-            const exp = Expression.walkMutate(field.expression, (exp) => {
-                if (exp instanceof JoinExpression) {
-                    implicitJoins.push(exp);
-                    return exp.source;
-                }
-                return exp;
             });
+        }
 
-            return exp as Alias<Expression>;
+        function implicitJoinExists(join: JoinExpression[], implicit: JoinExpression) {
+            return join.some((join) => implicitJoinMatches(join, implicit));
+        }
+
+        function implicitJoinMatches(join: JoinExpression, implicit: JoinExpression) {
+            if (join.source.isEqual(implicit.source) === false) {
+                return false;
+            }
+
+            if (join.joined.isEqual(implicit.joined) === false) {
+                return false;
+            }
+
+            if (join.join.length !== implicit.join.length) {
+                return false;
+            }
+
+            const joins = implicit.join.slice();
+            for (const jn of join.join) {
+                const index = joins.findIndex(
+                    (j) => jn.isEqual(j)
+                );
+
+                if (index === -1) {
+                    return false;
+                }
+
+                joins.splice(index, 1);
+            }
+
+            return true;
         }
     }
 }

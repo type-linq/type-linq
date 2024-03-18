@@ -1,5 +1,4 @@
-export * from './tree';
-export type { Predicate, Map, Merge, Serializable } from './type';
-export { Queryable } from './queryable/queryable';
-export { QueryProvider } from './query-provider';
-export type { Globals } from './convert/global';
+export type { Predicate, Map, Merge, Serializable } from './type.js';
+export { Queryable } from './queryable/queryable.js';
+export { QueryProvider } from './query-provider.js';
+export type { Globals } from './convert/global.js';

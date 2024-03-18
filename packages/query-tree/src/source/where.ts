@@ -1,6 +1,6 @@
-import { Type } from '../type';
-import { BinaryExpression, LogicalExpression } from '../binary';
-import { SourceExpression } from './source';
+import { Type } from '../type.js';
+import { BinaryExpression, LogicalExpression } from '../binary.js';
+import { SourceExpression } from './source.js';
 
 export class WhereExpression extends SourceExpression<`WhereExpression`> {
     expressionType = `WhereExpression` as const;

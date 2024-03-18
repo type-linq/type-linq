@@ -1,5 +1,5 @@
-import { Expression, ExpressionType } from './expression';
-import { BooleanType, Type } from './type';
+import { Expression, ExpressionType } from './expression.js';
+import { BooleanType, Type } from './type.js';
 
 export type UnaryOperator = `!`;
 

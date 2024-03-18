@@ -1,14 +1,17 @@
 import {
+    Alias,
     BinaryExpression,
+    Expression,
     LogicalExpression,
+    Walker,
     WhereExpression,
 } from '@type-linq/query-tree';
-import { convert } from '../convert/convert';
-import { Queryable } from './queryable';
-import { Predicate, Serializable } from '../type';
-import { parseFunction } from './parse';
-import { Globals } from '../convert/global';
-import { buildSources, varsName } from './util';
+import { convert } from '../convert/convert.js';
+import { Queryable } from './queryable.js';
+import { Predicate, Serializable } from '../type.js';
+import { parseFunction } from './parse.js';
+import { Globals } from '../convert/global.js';
+import { buildSources, varsName } from './util.js';
 
 export function where<TElement, TArgs extends Serializable | undefined = undefined>(
     this: Queryable<TElement>,
@@ -37,10 +40,20 @@ export function where<TElement, TArgs extends Serializable | undefined = undefin
 
     const where = new WhereExpression(
         this.expression,
-        clause,
+        stripAlias(clause) as LogicalExpression | BinaryExpression,
     );
     return new Queryable<TElement>(
         this.provider,
         where,
     );
+}
+
+function stripAlias(expression: Expression) {
+    return Walker.walkMutate(expression, (exp) => {
+        if (exp instanceof Alias) {
+            return exp.expression;
+        } else {
+            return exp;
+        }
+    });
 }

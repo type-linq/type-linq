@@ -1,6 +1,6 @@
-import { Expression } from './expression';
-import { Alias, EntityIdentifier, FieldIdentifier } from './identifier';
-import { JoinExpression } from './source/join';
+import { Expression } from './expression.js';
+import { Alias, EntityIdentifier, FieldIdentifier } from './identifier.js';
+import { JoinExpression } from './source/join.js';
 
 export function asArray<T>(value: T | T[]): T[] {
     if (Array.isArray(value)) {
