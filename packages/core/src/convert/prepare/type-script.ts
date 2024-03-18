@@ -1,4 +1,4 @@
-import { Expression, ExpressionTypeKey } from '../../type';
+import { Expression, ExpressionTypeKey } from '../../type.js';
 
 // Typescript
 //  Convert shims back to modern js

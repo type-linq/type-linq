@@ -1,5 +1,5 @@
-import { Expression, ExpressionType } from './expression';
-import { BooleanType, NumberType, Type } from './type';
+import { Expression } from './expression.js';
+import { BooleanType, NumberType, Type } from './type.js';
 
 export type EqualityOperator = `==` | `!=`;
 export type ComparisonOperator = `<` | `>` | `<=` | `>=`;
@@ -12,12 +12,12 @@ export abstract class BinaryExpressionBase<
     TExpression extends string,
     TOperator extends BinaryOperator,
 > extends Expression<TExpression> {
-    left: Expression<ExpressionType>;
+    left: Expression;
     operator: TOperator;
-    right: Expression<ExpressionType>;
+    right: Expression;
     type: Type;
 
-    constructor(left: Expression<ExpressionType>, operator: TOperator, right: Expression<ExpressionType>) {
+    constructor(left: Expression, operator: TOperator, right: Expression) {
         super();
         this.left = left;
         this.operator = operator;

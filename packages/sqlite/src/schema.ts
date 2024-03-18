@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import sqlite3 from 'sqlite3';
 import json from 'json5';
 
 const IGNORE = [`sqlite_sequence`];
@@ -60,8 +60,8 @@ export async function fetchSchema(file: string) {
     }
 
     function createDb() {
-        return new Promise<Database>((resolve, reject) => {
-            const result = new Database(file, (error) => {
+        return new Promise<sqlite3.Database>((resolve, reject) => {
+            const result = new sqlite3.Database(file, (error) => {
                 if (error) {
                     reject(error);
                 } else {

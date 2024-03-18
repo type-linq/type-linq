@@ -1,5 +1,5 @@
-import { Expression, ExpressionType } from './expression';
-import { Type, UnionType } from './type';
+import { Expression, ExpressionType } from './expression.js';
+import { Type, UnionType } from './type.js';
 
 export class TernaryExpression extends Expression<`TernaryExpression`> {
     expressionType = `TernaryExpression` as const;

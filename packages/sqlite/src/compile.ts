@@ -1,3 +1,4 @@
+import { Serializable } from '@type-linq/core';
 import {
     BinaryExpression,
     BinaryOperator,
@@ -7,21 +8,23 @@ import {
     CallExpression,
     CaseBlock,
     CaseExpression,
-    Column,
     Expression,
     ExpressionType,
-    GlobalExpression,
-    Identifier,
+    GlobalIdentifier,
     JoinClause,
     JoinExpression,
     Literal,
     SelectExpression,
-    SourceExpression,
     TernaryExpression,
     UnaryExpression,
     VariableExpression,
-    Serializable,
-} from '@type-linq/core';
+    EntityIdentifier,
+    FieldIdentifier,
+    FromExpression,
+    WhereExpression,
+    Walker,
+    Alias,
+} from '@type-linq/query-tree';
 
 export type SqlFragment = {
     sql: string;
@@ -60,7 +63,7 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
             
             let value: Serializable;
             if (variable.bound) {
-                value = variable.access();
+                value = variable.access() as Serializable;
             } else {
                 // TODO: late bound vars
                 throw new Error(`not implemented`);
@@ -88,27 +91,32 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
             return processCaseBlock(expression as CaseBlock);
         case  `CaseExpression`:
             return processCaseExpression(expression as CaseExpression);
-        case `Column`: {
-            const column = expression as Column;
-            const { sql, variables } = compile(column.expression);
+        case `GlobalIdentifier`:
             return {
-                sql: `${sql} as ${encodeIdentifier(column.name)}`,
-                variables,
+                sql: (expression as GlobalIdentifier).name,
+                variables: []
+            };
+        case `EntityIdentifier`: {
+            const exp = expression as EntityIdentifier;
+            return {
+                sql: encodeIdentifier(exp.name),
+                variables: [],
             };
         }
-        case `GlobalExpression`:
+        case `FieldIdentifier`: {
+            const exp = expression as FieldIdentifier;
+            const source = compile(exp.source);
             return {
-                sql: (expression as GlobalExpression).name,
-                variables: []
+                sql: `${source.sql}.${encodeIdentifier(exp.name)}`,
+                variables: [...source.variables],
             };
-        case `Identifier`: {
-            const identifier = expression as Identifier;
-            const sql = [...identifier.scope, identifier.name].map(
-                encodeIdentifier
-            ).join(`.`);
+        }
+        case `Alias`: {
+            const exp = expression as Alias<Expression>;
+            const source = compile(exp.expression);
             return {
-                sql,
-                variables: []
+                sql: `${source.sql} AS ${encodeIdentifier(exp.alias)}`,
+                variables: [...source.variables],
             };
         }
         case `JoinExpression`:
@@ -120,15 +128,12 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
             };
         case `SelectExpression`:
             return processSelectExpression(expression as SelectExpression);
-        case `SourceExpression`: {
-            const source = expression as SourceExpression;
-            const resource = encodeIdentifier(source.resource);
-            const name = encodeIdentifier(source.name);
-            return {
-                sql: `${resource} AS ${name}`,
-                variables: []
-            };
+        case `FromExpression`: {
+            const from = expression as FromExpression;
+            return compile(from.entity);
         }
+        case `WhereExpression`:
+            throw new Error(`Expected the select expression handler to handle the where expressions`);
         case `TernaryExpression`: {
             const ternary = expression as TernaryExpression;
             const caseBlock = new CaseBlock(
@@ -206,11 +211,7 @@ function processJoinExpression(join: JoinExpression): SqlFragment {
         .map((clause) => clause.sql)
         .join(`\n\tAND `);
 
-    // TODO: We need to be able to give our own name here!
-    // Source expressions are applying their own names!
-    // TODO: The join expressions should create new source expressions....
-
-    const inner = compile(join.source);
+    const inner = compile(join.joined);
     const sql = `JOIN ${inner.sql} ON\n\t${clausesSql}`;
 
     return {
@@ -277,64 +278,61 @@ function generateJoinSql(left: string, operator: EqualityOperator, right: string
 }
 
 function processSelectExpression(select: SelectExpression): SqlFragment {
-    const columns = asArray(select.columns).map((column) => {
-        const { sql, variables } = compile(column.expression);
-        return {
-            sql: `${sql} AS ${encodeIdentifier(column.name)}`,
-            variables,
-        };
+    const fields = select.fieldsArray.map((field) => {
+        const compiled = compile(field);
+        return compiled;
     });
-    const joins = select.join.map(compile);
 
-    const column = {
-        sql: columns.map((c) => c.sql).join(`, `),
-        variables: columns.map((c) => c.variables).flat(),
-    };
+    const joins = Walker.collectBranch(select, (exp) => {
+        return exp instanceof JoinExpression;
+    });
 
-    // TODO: Need to add brackets if this is not a source expression
-    // TODO: This is coming out as [Products].[Products]
-    const from = compile(select.source);
-    
-    const join = {
-        sql: joins.map((j) => j.sql).join(`\n`),
-        variables: columns.map((c) => c.variables).flat(),
-    };
+    const wheres = Walker.collectBranch(select, (exp) => {
+        return exp instanceof WhereExpression;
+    }) as WhereExpression[];
 
-    const where = select.where === undefined ?
-        undefined :
-        compile(select.where);
+    const firstWhere = wheres.shift();
+    const combinedClause = firstWhere &&
+        wheres.reduce(
+            (result, where) => new LogicalExpression(
+                result,
+                `&&`,
+                where.clause
+            ),
+            firstWhere.clause,
+        );
+
+    const from = Walker.source(select);
+
+    const compiledJoins = joins.map(compile);
+    const compiledWhere = combinedClause && compile(
+        combinedClause
+    );
+    const compiledFrom = compile(from);
 
     const parts = [
-        `SELECT ${column.sql}`,
-        `FROM ${from.sql}`,
-        join.sql,
+        `SELECT ${fields.map((f) => f.sql).join(`, `)}`,
+        `FROM ${compiledFrom.sql}`,
+        ...compiledJoins.map((j) => j.sql),
     ].filter(Boolean);
 
-    if (where) {
-        parts.push(`WHERE ${where.sql}`);
+    if (compiledWhere) {
+        parts.push(`WHERE ${compiledWhere.sql}`);
     }
 
     const sql = parts.join(`\n`);
     const variables = [
-        ...column.variables,
-        ...from.variables,
-        ...join.variables,
+        ...fields.map((f) => f.variables).flat(),
+        ...compiledFrom.variables,
+        ...compiledJoins.map((j) => j.variables).flat(),
     ];
 
-    if (where) {
-        variables.push(...where.variables);
+    if (compiledWhere) {
+        variables.push(...compiledWhere.variables);
     }
 
     return {
         sql,
         variables,
     };
-}
-
-function asArray<T>(value: T | T[]): T[] {
-    if (Array.isArray(value)) {
-        return value;
-    } else {
-        return [value];
-    }
 }

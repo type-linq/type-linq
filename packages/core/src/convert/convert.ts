@@ -1,26 +1,25 @@
-import { fetchSources, readName } from './util';
-import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type';
-import { walk } from '../walk';
-import { Globals, isGlobalIdentifier, mapGlobal, mapGlobalAccessor } from './global';
 import {
+    Alias,
     BinaryExpression,
     BinaryOperator,
     CallExpression,
-    ExpressionType,
-    GlobalExpression,
+    EntityType,
+    FieldIdentifier,
+    GlobalIdentifier,
     Literal,
     LogicalExpression,
     LogicalOperator,
     Expression as QueryExpression,
-    SelectExpression,
     SourceExpression,
     TernaryExpression,
     UnaryExpression,
-    UnionType,
     VariableExpression,
-    asArray
-} from '../tree/index';
-export type Sources = Record<string | symbol, QueryExpression<ExpressionType>>;
+} from '@type-linq/query-tree';
+import { readName } from './util.js';
+import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type.js';
+import { walk } from '../walk.js';
+import { Globals, isGlobalIdentifier, mapGlobal, mapGlobalAccessor } from './global.js';
+export type Sources = Record<string | symbol, QueryExpression>;
 
 export function convert(
     sources: Sources,
@@ -28,17 +27,10 @@ export function convert(
     varsName?: string | symbol,
     globals?: Globals,
     args?: Serializable,
-): { expression: QueryExpression<ExpressionType>, linkMap: Map<SourceExpression, SourceExpression[]> } {
-    // TODO: We need some additional information here...
-    //  We need to figur out the way the 2 sources map together....
-    const linkMap = new Map<SourceExpression, SourceExpression[]>();
+): QueryExpression {
+    return process(expression);
 
-    return {
-        linkMap,
-        expression: process(expression),
-    }
-
-    function process(expression: Expression<ExpressionTypeKey>): QueryExpression<ExpressionType> {
+    function process(expression: Expression<ExpressionTypeKey>): QueryExpression {
         switch (expression.type) {
             case `ExternalExpression`:
                 return processExternal(expression);
@@ -157,7 +149,7 @@ export function convert(
         }
     }
 
-    function processIdentifier(expression: Expression<`Identifier`>): QueryExpression<ExpressionType> {
+    function processIdentifier(expression: Expression<`Identifier`>): QueryExpression {
         if (expression.name === `undefined`) {
             return new Literal(null);
         }
@@ -208,7 +200,7 @@ export function convert(
         return new VariableExpression(path.slice(1), args);
     }
 
-    function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression<ExpressionType> {
+    function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression {
         if (expression.callee.type !== `MemberExpression`) {
             throw new Error(`Expected CallExpression to always act on a MemberExpression`);
         }
@@ -216,6 +208,10 @@ export function convert(
         const name = readName(expression.callee.property);
         const callee = process(expression.callee.object);
         const args = expression.arguments.map(process);
+
+        if (typeof name === `symbol`) {
+            throw new Error(`Unexpected symbol property name "${String(name)}" recieved`);
+        }
 
         const exp = mapGlobalAccessor(callee, name, args, globals);
 
@@ -225,7 +221,7 @@ export function convert(
         return exp;
     }
 
-    function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression<ExpressionType> {
+    function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression {
         const source = process(expression.object);
         const name = readName(expression.property);
 
@@ -233,16 +229,61 @@ export function convert(
             throw new Error(`Unexpected symbol property name`);
         }
 
-        if (source instanceof GlobalExpression) {
-            // This should have been handled above?
-            //  How would we apply a property to a global expression anyway?
-            throw new Error(`Unexpected GloblExpression`);
+        switch (true) {
+            case source instanceof FieldIdentifier: {
+                const type = source.type[name];
+                if (type === undefined) {
+                    throw new Error(`Unable to find identifier "${name}" on field "${source.name}"`);
+                }
+
+                if (source.type instanceof EntityType) {
+                    const result = processAccess(source, name);
+                    return result;
+                }
+
+                const exp = mapGlobalAccessor(source, name, [], globals);
+                if (exp === undefined) {
+                    throw new Error(`Unable to map MemberExpression to global`);
+                }
+                return exp;
+            }
+            case source instanceof BinaryExpression:
+            case source instanceof LogicalExpression:
+            case source instanceof TernaryExpression:
+            case source instanceof UnaryExpression:
+            case source instanceof SourceExpression: {
+                const result = processAccess(source, name) as QueryExpression;
+                return result;
+            }
+            case source instanceof GlobalIdentifier:
+                // This should have been handled above?
+                //  How would we apply a property to a global expression anyway?
+                throw new Error(`Unexpected GlobalIdentifier`);
+            case source instanceof CallExpression:
+            case source instanceof Literal: {
+                // Any time the source is a call expression we are going to
+                //  be mapping onto a global accessor since we can never return
+                //  an entity type from calls (or can we?)
+                const exp = mapGlobalAccessor(source, name, [], globals);
+                if (exp === undefined) {
+                    throw new Error(`Unable to map MemberExpression to global`);
+                }
+                return exp;
+            }
+            default:
+                throw new Error(`Unexpected expression type "${source.constructor.name}" received`);
+        }
+    }
+
+    function processAccess(source: QueryExpression, name: string) {
+        const type = source.type[name];
+        if (type === undefined) {
+            throw new Error(`Unable to find identifier "${name}" on source`);
         }
 
-        // Any time the source is a call expression we are going to
-        //  be mapping onto a global accessor since we can never return
-        //  an entity type from calls (or can we?)
-        if (source instanceof CallExpression) {
+        if (source.type instanceof EntityType === false) {
+            // Either a scalar or a union. In both cases we will
+            //  be accessing a globally mapped accessor
             const exp = mapGlobalAccessor(source, name, [], globals);
             if (exp === undefined) {
                 throw new Error(`Unable to map MemberExpression to global`);
@@ -250,50 +291,44 @@ export function convert(
             return exp;
         }
 
-        const sources = fetchSources(source);
-        const result = processAccess(source, name);
-
-        if (result instanceof SourceExpression === true) {
-            for (const source of sources) {
-                if (result.name !== source.name) {
-                    if (linkMap.has(source)) {
-                        linkMap.get(source)!.push(result);
-                    } else {
-                        linkMap.set(source, [result]);
-                    }
+        switch (true) {
+            case source instanceof SourceExpression: {
+                const field = source.field(name);
+                if (field === undefined) {
+                    throw new Error(`Unable to find identifier "${name}" on source`);
                 }
+                return field;
             }
-        }
+            case source instanceof FieldIdentifier: {
+                const field = source.source.field(name);
 
-        return result;
-    }
+                if (field === undefined) {
+                    throw new Error(`Unable to find identifier "${name}" on source`);
+                }
 
-    function processAccess(source: QueryExpression<ExpressionType>, name: string) {
-        if (source instanceof SourceExpression || source instanceof SelectExpression) {
-            const sourceColumn = asArray(source.columns).find(
-                (column) => column.name === name
-            );
+                if (field instanceof FieldIdentifier) {
+                    return new FieldIdentifier(
+                        field.source,
+                        field.name,
+                        field.type,
+                        [...source.implicitJoins, ...field.implicitJoins],
+                    );
+                }
 
-            if (sourceColumn) {
-                return sourceColumn.expression;
+                return field;
             }
+            case source instanceof Alias: {
+                return processAccess(source.expression, name);
+            }
+            case source instanceof BinaryExpression:
+            case source instanceof LogicalExpression:
+            case source instanceof TernaryExpression:
+            case source instanceof UnaryExpression:
+                // TODO: We would need to return multiple values from this surely?
+                throw new Error(`not implemented`);
+            default:
+                throw new Error(`Unexpected Expression type received "${source.constructor.name}"`);
         }
-
-        if(source.type instanceof UnionType) {
-            // TODO: Implament union types.
-            //  They will need to make sure the accessor is valid for all branches.
-            throw new Error(`Accessors onto union types are not currently supported`);
-        }
-
-        if (name in source.type === false) {
-            throw new Error(`Unable to find identifier "${name}" on source`);
-        }
-
-        const exp = mapGlobalAccessor(source, name, [], globals);
-        if (exp === undefined) {
-            throw new Error(`Unable to map MemberExpression to global ("${name}")`);
-        }
-        return exp;
     }
 }
 

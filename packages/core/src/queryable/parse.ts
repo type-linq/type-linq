@@ -1,9 +1,9 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import { parse } from 'espree';
-import { Expression, ExpressionType } from '../type';
-import { bindVars } from '../convert/prepare/args';
-import { undoTypeScriptTransforms } from '../convert/prepare';
+import { Expression, ExpressionType } from '../type.js';
+import { bindVars } from '../convert/prepare/args.js';
+import { undoTypeScriptTransforms } from '../convert/prepare/type-script.js';
 
 export function parseFunction<TArgs extends unknown[], TResult>(
     handler: (...args: TArgs) => TResult,

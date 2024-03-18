@@ -1,2 +1,2 @@
-export * from './args';
-export * from './type-script';
+export * from './args.js';
+export * from './type-script.js';

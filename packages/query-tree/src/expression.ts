@@ -1,23 +1,31 @@
 export type ExpressionType = `BinaryExpression` | `LogicalExpression` | `VariableExpression` |
-    `CallExpression` | `CaseExpression` | `CaseBlock` | `Column` | `GlobalExpression` | `Identifier` |
-    `JoinExpression` | `Literal` | `SelectExpression` | `SourceExpression` | `TernaryExpression` |
-    `UnaryExpression`;
+    `CallExpression` | `CaseExpression` | `CaseBlock` | `GlobalIdentifier` | `EntityIdentifier` |
+    `FieldIdentifier` | `JoinExpression` | `JoinClause` | `Literal` | `SelectExpression` |
+    `TernaryExpression` | `UnaryExpression` | `FromExpression` | `WhereExpression` |
+    `GroupExpression` | `Alias`;
 
-import { Type, areTypesEqual } from './type';
+export type SelectExpressionType = `SelectExpression` | `JoinExpression`;
+export type SourceExpressionType = `FromExpression` | `SelectExpression` | `WhereExpression` |
+    `JoinExpression` | `GroupExpression`;
+export type IdentifierExpressionType = `EntityIdentifier` | `FieldIdentifier` | `GlobalIdentifier`;
 
-export abstract class Expression<TType extends string> {
+import { Type, isEqual as isTypeEqual } from './type.js';
+
+export abstract class Expression<TType extends string = ExpressionType> {
     abstract expressionType: TType;
     abstract type: Type;
     
-    isEqual(expression: Expression<TType>): boolean {
-        if (expression.expressionType !== `JoinExpression`) {
-            if (areTypesEqual(this.type, expression.type) === false) {
-                return false;
-            }
+    isEqual(expression: Expression<TType>, ...ignore: string[]): boolean {
+        if (ignore.includes(`type`) === false && isTypeEqual(this.type, expression.type) === false) {
+            return false;
         }
 
         for (const [name, value] of Object.entries(expression)) {
             if (name === `type`) {
+                continue;
+            }
+
+            if (ignore.includes(name)) {
                 continue;
             }
 
@@ -54,15 +62,6 @@ export abstract class Expression<TType extends string> {
             }
 
             return thisValue === value;
-        }
-    }
-
-    static walk(expression: Expression<string>, visitor: (expression: Expression<string>) => void) {
-        visitor(expression);
-        for (const value of Object.values(expression)) {
-            if (value instanceof Expression) {
-                Expression.walk(value, visitor);
-            }
         }
     }
 }

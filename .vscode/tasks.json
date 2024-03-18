@@ -1,0 +1,44 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Query Tree",
+            "type": "typescript",
+            "tsconfig": "packages/query-tree/tsconfig.json",
+            "problemMatcher": ["$tsc"],
+            "group": {
+                "kind": "build"
+            }
+        },
+
+        {
+            "label": "Build Core",
+            "type": "typescript",
+            "tsconfig": "packages/core/tsconfig.json",
+            "problemMatcher": ["$tsc"],
+            "group": {
+                "kind": "build"
+            }
+        },
+
+        {
+            "label": "Build Sqlite",
+            "type": "typescript",
+            "tsconfig": "packages/sqlite/tsconfig.json",
+            "problemMatcher": ["$tsc"],
+            "group": {
+                "kind": "build"
+            }
+        },
+
+        {
+            "label": "Build",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Build Query Tree",
+                "Build Core",
+                "Build Sqlite",
+            ]
+        }
+    ]
+}

@@ -1,15 +1,15 @@
-import { QueryProvider } from '../query-provider';
-import { Expression, ExpressionType } from '../tree/expression';
-import { select } from './select';
-import { where } from './where';
-import { join } from './join';
-import { Map, Merge, Predicate, Serializable } from '../type';
+import { SourceExpression } from '@type-linq/query-tree';
+import { QueryProvider } from '../query-provider.js';
+import { select } from './select.js';
+import { where } from './where.js';
+import { join } from './join.js';
+import { Map, Merge, Predicate, Serializable } from '../type.js';
 
 export class Queryable<TElement> {
     readonly provider: QueryProvider;
-    readonly expression: Expression<ExpressionType>;
+    readonly expression: SourceExpression;
 
-    constructor(provider: QueryProvider, expression: Expression<ExpressionType>) {
+    constructor(provider: QueryProvider, expression: SourceExpression) {
         this.provider = provider;
         this.expression = expression;
     }

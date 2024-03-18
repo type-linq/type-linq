@@ -1,5 +1,5 @@
-import { Expression, ExpressionType, ExpressionTypeKey } from '../../type';
-import { mutateWalk } from '../../walk';
+import { Expression, ExpressionType, ExpressionTypeKey } from '../../type.js';
+import { mutateWalk } from '../../walk.js';
 
 // TODO: Modify this to not mutate the expression
 

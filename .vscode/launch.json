@@ -9,8 +9,10 @@
             "type": "node",
             "request": "launch",
             "program": "${file}",
-            "preLaunchTask": "tsc: build - tsconfig.json",
-            "outFiles": ["${workspaceFolder}/dist/**/*.js", "${workspaceRoot}/node_modules/**/*.js"]
+            "preLaunchTask": "Build",
+            "outFiles": [
+                "${workspaceFolder}/packages/*/dist/**/*.js"
+            ]
         },
         {
             "name": "Current Test",

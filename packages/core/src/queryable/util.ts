@@ -1,9 +1,8 @@
-import { readName } from '../convert/util';
-import { SelectExpression, SourceExpression } from '../tree';
-import { Expression, ExpressionType } from '../tree/expression';
-import { Expression as AstExpression } from '../type';
+import { Expression } from '@type-linq/query-tree';
+import { readName } from '../convert/util.js';
+import { Expression as AstExpression } from '../type.js';
 
-export function buildSources(ast: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression<ExpressionType>[]) {
+export function buildSources(ast: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]) {
     return sources.reduce(
         (result, source, index) => {
             const name = ast.params.length > index ?
@@ -17,7 +16,7 @@ export function buildSources(ast: AstExpression<`ArrowFunctionExpression`>, ...s
             result[name] = source;
             return result;
         },
-        { } as Record<string, Expression<ExpressionType>>
+        { } as Record<string, Expression>
     );
 }
 
@@ -34,24 +33,10 @@ export function varsName(ast: AstExpression<`ArrowFunctionExpression`>) {
     return lastParam.name as string;
 }
 
-export function expressionSource(expression: SelectExpression | SourceExpression) {
-    if (expression instanceof SourceExpression) {
-        return expression;
-    } else if (expression.source instanceof SourceExpression) {
-        return expression.source;
-    } else if (expression.source instanceof SelectExpression) {
-        return expressionSource(expression.source);
+export function asArray<T>(value: T | T[]): T[] {
+    if (Array.isArray(value)) {
+        return value;
     } else {
-        throw new Error(`Expected only SelectExpression or SourceExpression`);
-    }
-}
-
-export function replaceSource(expression: SelectExpression | SourceExpression, replace: (existing: SourceExpression) => SourceExpression) {
-    if (expression instanceof SourceExpression) {
-        return replace(expression);
-    } else if (expression instanceof SelectExpression) {
-        return replaceSource(expression.source, replace);
-    } else {
-        throw new Error(`Expected only SelectExpression or SourceExpression.`);
+        return [value];
     }
 }

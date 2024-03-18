@@ -1,24 +1,26 @@
-import { Serializable } from '../type';
-import { Expression } from './expression';
-import { BooleanType, NullType, NumberType, StringType, Type, UnionType } from './type';
+import cloneDeep from 'lodash.clonedeep';
+import { Expression } from './expression.js';
+import { BooleanType, DateType, NullType, NumberType, StringType, Type, scalarUnion } from './type.js';
 
-export class VariableExpression extends Expression<`VariableExpression`> {
+export class VariableExpression<TBound = unknown> extends Expression<`VariableExpression`> {
     expressionType = `VariableExpression` as const;
     type: Type;
     path: string[];
-    bound: Serializable;
+    bound?: TBound;
 
-    constructor(path: string[], bound?: Serializable) {
+    constructor(path: string[], bound?: TBound) {
+        // We make a deep copy since the variable needs to
+        //  be as it was when the function was declared.
+        if (bound) {
+            bound = cloneDeep(bound);
+        }
+
         super();
         this.path = path;
         this.bound = bound;
 
         if (bound === undefined) {
-            this.type = new UnionType(
-                new BooleanType(),
-                new StringType(),
-                new NumberType(),
-            );
+            this.type = scalarUnion;
             return;
         }
 
@@ -26,6 +28,11 @@ export class VariableExpression extends Expression<`VariableExpression`> {
 
         if (value === null) {
             this.type = new NullType();
+            return;
+        }
+
+        if (value instanceof Date) {
+            this.type = new DateType();
             return;
         }
 
@@ -51,7 +58,7 @@ export class VariableExpression extends Expression<`VariableExpression`> {
         }
     }
 
-    access(supplied?: Serializable): Serializable {
+    access(supplied?: unknown): unknown {
         const vars = supplied === undefined ?
             this.bound :
             supplied;

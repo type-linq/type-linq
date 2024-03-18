@@ -1,25 +1,27 @@
-import { Database } from 'sqlite3';
+import sqlite3 from 'sqlite3';
 import {
     QueryProvider,
     Queryable,
     Serializable,
     Globals,
+} from '@type-linq/core';
+import {
     Type,
     Expression,
     ExpressionType,
-    GlobalExpression,
+    GlobalIdentifier,
     CallExpression,
-    SelectExpression,
-} from '@type-linq/core';
-import { compile } from './compile';
-import { DatabaseSchema } from './schema';
+    Janitor,
+} from '@type-linq/query-tree';
+import { compile } from './compile.js';
+import { DatabaseSchema } from './schema.js';
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;
     #globalIdentifiers: unknown;
 
     #dbFile: string;
-    #db?: Database;
+    #db?: sqlite3.Database;
     #schema: DatabaseSchema;
 
     constructor(db: string, schema: DatabaseSchema, globals?: unknown) {
@@ -36,10 +38,7 @@ export class SqliteProvider extends QueryProvider {
     }
 
     async *execute<TResult>(source: Queryable<TResult>): AsyncGenerator<TResult> {
-        const expression = source.expression instanceof SelectExpression ?
-            source.expression.applyImplicitJoins() :
-            source.expression;
-
+        const expression = Janitor.finalize(source.expression, true, true);
         const { sql, variables } = this.compile(expression);
 
         console.log(`Executing SQL`);
@@ -84,7 +83,7 @@ export class SqliteProvider extends QueryProvider {
         console.log(this.#dbFile);
 
         this.#db = await new Promise((resolve, reject) => {
-            const result = new Database(this.#dbFile, (error) => {
+            const result = new sqlite3.Database(this.#dbFile, (error) => {
                 if (error) {
                     reject(error);
                 } else {
@@ -94,13 +93,13 @@ export class SqliteProvider extends QueryProvider {
         });
     }
 
-    #mapIdentifier = (...path: string[]): GlobalExpression | undefined => {
+    #mapIdentifier = (...path: string[]): GlobalIdentifier | undefined => {
         console.log(`mapIdentifier`, path);
         // throw new Error(`not implemented`);
         return undefined;
     }
 
-    #mapAccessor = (type: Type, object: Expression<ExpressionType>, name: string | symbol, args: Expression<ExpressionType>[]): GlobalExpression | CallExpression | undefined => {
+    #mapAccessor = (type: Type, object: Expression<ExpressionType>, name: string | symbol, args: Expression<ExpressionType>[]): GlobalIdentifier | CallExpression | undefined => {
         console.log(`mapAccessor`, type, object, name, args);
         return undefined;
     }
