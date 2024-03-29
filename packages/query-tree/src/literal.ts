@@ -1,17 +1,23 @@
 import { Expression } from './expression.js';
-import { BooleanType, NullType, NumberType, StringType, Type } from './type.js';
+import { BooleanType, DateType, NullType, NumberType, StringType, Type } from './type.js';
 
-export class Literal extends Expression<`Literal`> {
-    expressionType = `Literal` as const;
-    value: string | number | boolean | null;
+export type LiteralValue = string | number | boolean | Date | null | undefined
+
+export class Literal extends Expression {
+    value: LiteralValue;
     type: Type;
 
-    constructor(value: string | number | boolean | null | undefined) {
+    constructor(value: LiteralValue) {
         super();
 
-        if (value === undefined) {
+        if (value === undefined || value === null) {
             this.value = null;
             this.type = new NullType();
+            return;
+        }
+
+        if (value instanceof Date) {
+            this.type = new DateType();
             return;
         }
 
@@ -30,4 +36,21 @@ export class Literal extends Expression<`Literal`> {
                 throw new Error(`Invalid type "${typeof value}" received`);
         }
     }
+
+    isEqual(expression?: Expression | undefined): boolean {
+        if (expression === this) {
+            return true;
+        }
+
+        if (expression instanceof Literal === false) {
+            return false;
+        }
+        return this.value === expression.value;
+    }
+
+    rebuild(): Literal {
+        return this;
+    }
+
+    *walk() { }
 }

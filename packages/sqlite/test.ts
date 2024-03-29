@@ -49,16 +49,16 @@ const schema: DatabaseSchema = {
         Products: {
             name: `Products`,
             columns: {
-                ProductID: `INTEGER`,
-                ProductName: `TEXT`,
-                SupplierID: `INTEGER NULL`,
-                CategoryID: `INTEGER NULL`,
-                QuantityPerUnit: `TEXT NULL`,
-                UnitPrice: `NUMERIC NULL`,
-                UnitsInStock: `INTEGER NULL`,
-                UnitsOnOrder: `INTEGER NULL`,
-                ReorderLevel: `INTEGER NULL`,
-                Discontinued: `TEXT`,
+                ProductID: { name: `ProductID`, type: `INTEGER` },
+                ProductName: { name: `ProductName`, type: `TEXT` },
+                SupplierID: { name: `SupplierID`, type: `INTEGER NULL` },
+                CategoryID: { name: `CategoryID`, type: `INTEGER NULL` },
+                QuantityPerUnit: { name: `QuantityPerUnit`, type: `TEXT NULL` },
+                UnitPrice: { name: `UnitPrice`, type: `NUMERIC NULL` },
+                UnitsInStock: { name: `UnitsInStock`, type: `INTEGER NULL` },
+                UnitsOnOrder: { name: `UnitsOnOrder`, type: `INTEGER NULL` },
+                ReorderLevel: { name: `ReorderLevel`, type: `INTEGER NULL` },
+                Discontinued: { name: `Discontinued`, type: `TEXT` },
             },
             links: {
                 Supplier: {
@@ -72,22 +72,22 @@ const schema: DatabaseSchema = {
         Suppliers: {
             name: `Suppliers`,
             columns: {
-                SupplierID: `INTEGER`,
-                CompanyName: `TEXT`,
-                ContactName: `TEXT NULL`,
-                ContactTitle: `TEXT NULL`,
-                Address: `TEXT NULL`,
-                City: `TEXT NULL`,
-                Region: `TEXT NULL`,
-                PostalCode: `TEXT NULL`,
-                Country: `TEXT NULL`,
-                Phone: `TEXT NULL`,
-                Fax: `TEXT NULL`,
-                HomePage: `TEXT NULL`,
+                SupplierID: { name: `SupplierID`, type: `INTEGER` },
+                CompanyName: { name: `CompanyName`, type: `TEXT` },
+                ContactName: { name: `ContactName`, type: `TEXT NULL` },
+                ContactTitle: { name: `ContactTitle`, type: `TEXT NULL` },
+                Address: { name: `Address`, type: `TEXT NULL` },
+                City: { name: `City`, type: `TEXT NULL` },
+                Region: { name: `Region`, type: `TEXT NULL` },
+                PostalCode: { name: `PostalCode`, type: `TEXT NULL` },
+                Country: { name: `Country`, type: `TEXT NULL` },
+                Phone: { name: `Phone`, type: `TEXT NULL` },
+                Fax: { name: `Fax`, type: `TEXT NULL` },
+                HomePage: { name: `HomePage`, type: `TEXT NULL` },
             },
 
             links: {
-                Product: {
+                Products: {
                     table: `Products`,
                     columns: {
                         SupplierID: `SupplierID`,
@@ -214,7 +214,23 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
             name: c.ProductName,
             supplier: c.Supplier.CompanyName,
         }))
+        // .select((c) => ({
+        //     productId: c.productId,
+        //     name: c.name,
+        //     supplier: c.supplier,
+        // }))
         .where((c) => c.supplier > arg, { arg })
+        .join(
+            suppliers,
+            (c) => c.supplier,
+            (c) => c.CompanyName,
+            (outer, inner) => ({
+                productId: outer.productId,
+                name: outer.name,
+                supplier: outer.supplier,
+                supplierId: inner.SupplierID,
+            })
+        )
 
     for await (const product of query2) {
         console.dir(product);

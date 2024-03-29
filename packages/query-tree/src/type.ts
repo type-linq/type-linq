@@ -1,9 +1,13 @@
-export type Type = StringType | NumberType | BooleanType | NullType | DateType | EntityType | UnionType | FunctionType;
+export type Type = StringType | NumberType | BooleanType | NullType | DateType | EntityType | UnionType | FunctionType | UnknownType;
 
 export const UNION_TYPES = Symbol(`union-types`);
 
+export class UnknownType {
+    readonly [name: string]: Type | undefined;
+}
+
 export class StringType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
 
     get length() { return new NumberType(); }
     get startsWith() { return  new FunctionType(new BooleanType()) }
@@ -16,32 +20,32 @@ export class StringType {
 }
 
 export class NumberType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
     get toString() { return new FunctionType(new StringType()) }
 }
 
 export class BooleanType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
     get toString() { return new FunctionType(new StringType()) }
 }
 
 export class DateType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
     get toString() { return new FunctionType(new StringType()) }
     get valueOf() { return new FunctionType(new NumberType()) }
 }
 
 export class BinaryType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
     get toString() { return new FunctionType(new StringType()) }
 }
 
 export class NullType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
 }
 
 export class FunctionType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
     returnType: Type;
 
     constructor(returnType: Type) {
@@ -49,15 +53,30 @@ export class FunctionType {
     }
 }
 
-export type Fields = {
-    [name: string]: Type;
+export type TypeFields = {
+    [name: string]: Type | (() => Type);
 }
 
 export class EntityType {
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
 
-    constructor(fields: Fields) {
-        Object.assign(this, fields);
+    constructor(fields: TypeFields) {
+
+        for (const [name, type] of Object.entries(fields)) {
+            if (typeof type === `function`) {
+                Object.defineProperty(this, name, {
+                    configurable: true,
+                    enumerable: true,
+                    get: type,
+                });
+            } else {
+                Object.defineProperty(this, name, {
+                    configurable: true,
+                    enumerable: true,
+                    value: type,
+                });
+            }
+        }
         return this as EntityType;
     }
 }
@@ -95,7 +114,7 @@ export class UnionTypeProxy {
 
 export class UnionType extends UnionTypeProxy {
     [UNION_TYPES]: Type[];
-    [name: string]: Type | undefined;
+    readonly [name: string]: Type | undefined;
 
     constructor(...types: Type[]) {
         const unique = UnionType.unique(...types);
@@ -103,11 +122,20 @@ export class UnionType extends UnionTypeProxy {
         this[UNION_TYPES] = unique;
     }
 
+    static allTypes(type: Type): Type[] {
+        if (type instanceof UnionType === false) {
+            return [type];
+        }
+        return type[UNION_TYPES].map(UnionType.allTypes).flat();
+    }
+
     static possibleUnion(...types: Type[]) {
         if (types.length === 0) {
             throw new Error(`MUST supply at least one type`);
         }
-        const unique = UnionType.unique(...types);
+
+        const all = types.map(UnionType.allTypes).flat();
+        const unique = UnionType.unique(...all);
         if (unique.length === 1) {
             return unique[0];
         }

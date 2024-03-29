@@ -7,7 +7,10 @@ export type ColumnType = `TEXT` | `NUMERIC` | `INTEGER` | `REAL` | `BLOB`;
 export type NullableColumnType = `${ColumnType} NULL`;
 
 export type TableColumns = {
-    [name: string]: ColumnType | NullableColumnType;
+    [name: string]: {
+        name: string;
+        type: ColumnType | NullableColumnType;
+    };
 }
 
 export type TableLink = {
@@ -97,11 +100,17 @@ export async function fetchSchema(file: string) {
         const columns = await exec(`select * from pragma_table_info('${name}')`);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return columns.reduce<Record<string, NullableColumnType>>((result, column: any) => {
+        return columns.reduce<Record<string, { name: string, type: NullableColumnType }>>((result, column: any) => {
             if (column.notnull) {
-                result[column.name] = `${column.type} NULL` as NullableColumnType;
+                result[column.name] = {
+                    name: column.name,
+                    type: `${column.type} NULL` as NullableColumnType,
+                };
             } else {
-                result[column.name] = column.type;
+                result[column.name] = {
+                    name: column.name,
+                    type: column.type,
+                };
             }
             return result;
         }, {});
@@ -172,7 +181,7 @@ export function buildTypes(schema: DatabaseSchema) {
 // TODO: Add functions to map names
 // TODO: Add functions to map types
 export function buildType(schema: TableSchema<TableColumns>) {
-    const properties = Object.entries(schema.columns).map(([name, value]) => {
+    const properties = Object.entries(schema.columns).map(([name, { type: value }]) => {
         const nullable = value.split(` `).pop() === `NULL`;
         const typeName = typescriptTypeName(value);
         return `${name}${nullable ? `?` : ``}: ${typeName};`;

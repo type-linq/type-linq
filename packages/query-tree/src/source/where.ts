@@ -1,29 +1,51 @@
-import { Type } from '../type.js';
 import { BinaryExpression, LogicalExpression } from '../binary.js';
-import { SourceExpression } from './source.js';
+import { Source } from './source.js';
+import { Expression } from '../expression.js';
 
-export class WhereExpression extends SourceExpression<`WhereExpression`> {
-    expressionType = `WhereExpression` as const;
-
+export class WhereExpression extends Source {
+    readonly clause: LogicalExpression | BinaryExpression;
+    
     get source() {
         return super.source!;
     }
 
-    get fields() {
-        return this.source.fields;
+    get fieldSet() {
+        return this.source.fieldSet;
     }
-
-    get type(): Type {
-        return this.source.type;
-    }
-
-    clause: LogicalExpression | BinaryExpression;
 
     constructor(
-        source: SourceExpression,
+        source: Source,
         clause: LogicalExpression | BinaryExpression,
     ) {
         super(source);
         this.clause = clause;
+    }
+
+    isEqual(expression?: Expression | undefined): boolean {
+        if (expression === this) {
+            return true;
+        }
+
+        if (expression instanceof WhereExpression === false) {
+            return false;
+        }
+
+        return this.source.isEqual(expression.source) &&
+            this.clause.isEqual(expression.clause);
+    }
+
+    rebuild(
+        source: Source | undefined,
+        clause: LogicalExpression | BinaryExpression | undefined,
+    ): Expression {
+        return new WhereExpression(
+            source ?? this.source,
+            clause ?? this.clause,
+        );
+    }
+
+    *walk() {
+        yield this.source;
+        yield this.clause;
     }
 }

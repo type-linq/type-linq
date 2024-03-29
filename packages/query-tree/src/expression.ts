@@ -1,67 +1,40 @@
-export type ExpressionType = `BinaryExpression` | `LogicalExpression` | `VariableExpression` |
-    `CallExpression` | `CaseExpression` | `CaseBlock` | `GlobalIdentifier` | `EntityIdentifier` |
-    `FieldIdentifier` | `JoinExpression` | `JoinClause` | `Literal` | `SelectExpression` |
-    `TernaryExpression` | `UnaryExpression` | `FromExpression` | `WhereExpression` |
-    `GroupExpression` | `Alias`;
+import { Type } from './type.js';
 
-export type SelectExpressionType = `SelectExpression` | `JoinExpression`;
-export type SourceExpressionType = `FromExpression` | `SelectExpression` | `WhereExpression` |
-    `JoinExpression` | `GroupExpression`;
-export type IdentifierExpressionType = `EntityIdentifier` | `FieldIdentifier` | `GlobalIdentifier`;
+export abstract class Expression {
+    abstract readonly type: Type;
 
-import { Type, isEqual as isTypeEqual } from './type.js';
+    abstract isEqual(expression?: Expression): boolean;
+    protected abstract rebuild(...args: (Expression | undefined)[]): Expression;
+    abstract walk(): Generator<Expression>;
 
-export abstract class Expression<TType extends string = ExpressionType> {
-    abstract expressionType: TType;
-    abstract type: Type;
-    
-    isEqual(expression: Expression<TType>, ...ignore: string[]): boolean {
-        if (ignore.includes(`type`) === false && isTypeEqual(this.type, expression.type) === false) {
+    #shouldRebuild(original: Expression[], updated: (Expression | undefined)[]) {
+        if (original.length !== updated.length) {
+            throw new Error(`Expected original and updated lengths to match`);
+        }
+
+        if (updated.every((upd) => upd === undefined)) {
             return false;
         }
 
-        for (const [name, value] of Object.entries(expression)) {
-            if (name === `type`) {
+        for (let index = 0; index < original.length; index++) {
+            const updat = updated[index];
+            if (updat === undefined) {
                 continue;
             }
 
-            if (ignore.includes(name)) {
-                continue;
-            }
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const thisValue = (this as any)[name];
-            if (areEqual(thisValue, value) === false) {
-                return false;
+            if (original[index].isEqual(updat) === false) {
+                return true;
             }
         }
 
-        return true;
+        return false;
+    }
 
-        function areEqual(thisValue: unknown, value: unknown) {
-            if (Array.isArray(thisValue) !== Array.isArray(value)) {
-                return false;
-            }
-
-            if (Array.isArray(thisValue) && Array.isArray(value)) {
-                if (thisValue.length !== value.length) {
-                    return false;
-                }
-                for (let index = 0; index < thisValue.length; index++) {
-                    const element1 = thisValue[index];
-                    const element2 = value[index];
-
-                    if (areEqual(element1, element2) === false) {
-                        return false;
-                    }
-                }
-            }
-
-            if (value instanceof Expression && thisValue instanceof Expression) {
-                return value.isEqual(thisValue);
-            }
-
-            return thisValue === value;
+    mutate(updated: (Expression | undefined)[]) {
+        const rebuildValues = Array.from(this.walk());
+        if (this.#shouldRebuild(rebuildValues, updated) === false) {
+            return this;
         }
+        return this.rebuild(...updated);
     }
 }

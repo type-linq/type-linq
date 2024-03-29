@@ -1,95 +1,94 @@
 import {
-    Alias,
     Expression,
-    JoinClause,
-    JoinExpression,
     SelectExpression,
     Walker,
+    BinaryExpression,
+    Field,
+    LogicalExpression,
+    JoinExpression,
+    Source,
+    EntitySource,
 } from '@type-linq/query-tree';
 
 import { convert } from '../convert/convert.js';
 import { readName } from '../convert/util.js';
-import { Queryable } from './queryable.js';
 import { Expression as AstExpression } from '../type.js';
 import { Merge, Map as ValueMap, Serializable, ExpressionTypeKey } from '../type.js';
 import { parseFunction } from './parse.js';
 import { Globals } from '../convert/global.js';
 import { SCALAR_NAME, transformSelect } from './select.js';
-import { asArray, buildSources, varsName } from './util.js';
+import { buildSources, varsName } from './util.js';
+import { Queryable } from './queryable.js';
 
 // TODO: Add override that will take inner and 2 functions...
 //  1. A function that will return a logical expression used to join
 //  2. A result selector
 
 export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable | undefined = undefined>(
-    this: Queryable<TOuter>,
+    outer: Queryable<TOuter>,
     inner: Queryable<TInner>,
     outerKey: ValueMap<TOuter, TKey>,
     innerKey: ValueMap<TInner, TKey>,
     result: Merge<TOuter, TInner, TResult>,
     args?: TArgs,
-): Queryable<TResult> {
+): Source {
+    if (outer.provider !== inner.provider) {
+        throw new Error(`Must join sources with the same provider`);
+    }
 
-    const outerExpression = this.expression;
+    const outerExpression = outer.expression;
     const innerExpression = inner.expression;
 
     const outerAst = parseFunction(outerKey, 1, args);
     const innerAst = parseFunction(innerKey, 1, args);
     const resultAst = parseFunction(result, 2, args);
 
-    const globals: Globals = this.provider.globals;
+    const globals: Globals = outer.provider.globals;
 
     const outerColumns = processKey(outerAst, outerExpression);
     const innerColumns = processKey(innerAst, innerExpression);
 
-    if (Array.isArray(outerColumns) !== Array.isArray(innerColumns)) {
-        throw new Error(`The inner and outer keys returned incompatible result types`);
+    const condition = createJoinClause(outerColumns, innerColumns);
+
+    let innerSource = Walker.find(innerExpression, (exp) => exp instanceof SelectExpression) as SelectExpression | undefined;
+    if (innerSource === undefined) {
+        if (innerExpression instanceof EntitySource) {
+            innerSource = innerExpression;
+        }
     }
 
-    if (Array.isArray(outerColumns) && outerColumns.length !== (innerColumns as unknown[]).length) {
-        throw new Error(`The inner and outer keys returned different number of columns to match on`);
+    if (innerSource === undefined) {
+        throw new Error(`Unable to find a select expression`);
     }
-
-    const clauses = asArray(outerColumns).map(
-        (outer, index) => new JoinClause(
-            outer.expression,
-            asArray(innerColumns)[index].expression,
-        )
-    );
 
     const joinExpression = new JoinExpression(
         outerExpression,
-        innerExpression,
-        clauses
+        innerSource.entity,
+        condition,
     );
 
-    // Check if join exists
-    const existing = Walker.walkBranchFind(outerExpression, (exp) => {
-        if (exp instanceof JoinExpression === false) {
-            return false;
+    const fieldSet = transformSelect(
+        [outerExpression, innerExpression],
+        resultAst,
+        outer.provider.globals,
+    );
+
+    // Now swap out any existing select
+    const expression = Walker.mapSource(joinExpression, (exp) => {
+        if (exp instanceof SelectExpression === false) {
+            return exp;
         }
 
-        // Check if everything except the source matches (since it is in
-        //  the same branch, the underlying source is the same)
-        return exp.isEqual(joinExpression, `source`);
+        // We always want a select at the base
+        const select = new SelectExpression(exp.entity, fieldSet);
+        return select;
     });
 
-    const source = existing ? joinExpression : outerExpression;
 
-    // Apply the select
-    const fields = transformSelect(
-        [source, innerExpression],
-        resultAst,
-        this.provider.globals,
-    );
+    return expression;
 
-    const select = new SelectExpression(source, fields);
-    return new Queryable<TResult>(
-        this.provider,
-        select,
-    );
-
-    function processKey(expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]) {
+    function processKey(expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]): Field | Field[] {
+        // TODO: These sources need to be the identifiers!
         const sourceMap = buildSources(expression, ...sources);
         const vars = varsName(expression);
 
@@ -138,9 +137,50 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
             args,
         );
 
-        return new Alias(
-            converted,
-            name,
-        );
+        return new Field(converted, name);
+    }
+
+    function createJoinClause(outer: Field | Field[], inner: Field | Field[]): BinaryExpression | LogicalExpression {
+        if (Array.isArray(outer) && Array.isArray(inner)) {
+            return buildJoinClauses(outer, inner);
+        } else if (Array.isArray(outer) === false && Array.isArray(inner) === false) {
+            return new BinaryExpression(
+                outer.source,
+                `==`,
+                inner.source,
+            );
+        } else {
+            throw new Error(`The inner and outer keys returned incompatible result types`);
+        }
+    }
+
+    function buildJoinClauses(outer: Field[], inner: Field[]): BinaryExpression | LogicalExpression {
+        if (outer.length !== inner.length) {
+            throw new Error(`The inner and outer keys returned different number of columns to match on`);
+        }
+
+        let current: BinaryExpression | LogicalExpression | undefined = undefined;
+        for (const outerColumm of outer) {
+            const innerColumn = inner.find(
+                (column) => column.name === outerColumm.name
+            );
+
+            if (innerColumn === undefined) {
+                throw new Error(`Unable to find field on the inner source named "${outerColumm.name.name}"`);
+            }
+
+            const clause = new BinaryExpression(
+                outerColumm.source,
+                `==`,
+                innerColumn.source,
+            );
+
+            if (current === undefined) {
+                current = clause;
+            } else {
+                current = new LogicalExpression(clause, `&&`, current);
+            }
+        }
+        return current!;
     }
 }

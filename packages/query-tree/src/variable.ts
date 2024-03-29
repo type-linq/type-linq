@@ -1,9 +1,9 @@
 import cloneDeep from 'lodash.clonedeep';
+import isEqual from 'lodash.isequal';
 import { Expression } from './expression.js';
 import { BooleanType, DateType, NullType, NumberType, StringType, Type, scalarUnion } from './type.js';
 
-export class VariableExpression<TBound = unknown> extends Expression<`VariableExpression`> {
-    expressionType = `VariableExpression` as const;
+export class VariableExpression<TBound = unknown> extends Expression {
     type: Type;
     path: string[];
     bound?: TBound;
@@ -91,4 +91,25 @@ export class VariableExpression<TBound = unknown> extends Expression<`VariableEx
 
         throw new Error(`vars is not an object yet an access path is assigned to the VariableExpression`);
     }
+
+    isEqual(expression?: Expression | undefined): boolean {
+        if (expression === this) {
+            return true;
+        }
+
+        if (expression instanceof VariableExpression === false) {
+            return false;
+        }
+
+        const isBoundSame = isEqual(this.bound, expression.bound);
+        const isPathSame = expression.path.every((p, i) => p === this.path[i]);
+
+        return isBoundSame && isPathSame;
+    }
+
+    rebuild(): VariableExpression {
+        return this;
+    }
+
+    *walk() { }
 }

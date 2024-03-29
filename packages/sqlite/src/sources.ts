@@ -2,52 +2,105 @@ import {
     BinaryType,
     NumberType,
     StringType,
-    FromExpression,
     EntityIdentifier,
-    LinkField,
     EntityType,
+    EntitySource,
+    TypeFields,
+    Field,
+    FieldSet,
+    FieldIdentifier,
+    LogicalExpression,
+    BinaryExpression,
+    Literal,
+    LinkedEntitySource,
 } from '@type-linq/query-tree';
 
 import { DatabaseSchema } from './schema.js';
 
 export function buildSources(schema: DatabaseSchema) {
-    const sources: Record<string, FromExpression> = {};
+    const entityTypes: Record<string, EntityType> = {};
+    const entities: Record<string, EntityIdentifier> = {};
+    const sources: Record<string, EntitySource> = {};
 
-    // Add the scalar columns
-    for (const [name, table] of Object.entries(schema.tables)) {
-        const type = new EntityType(
-            Object.fromEntries(
-                Object.entries(table.columns).map(
-                    ([name, dbType]) => [name, createType(dbType)]
-                )
-            )
-        );
+    // TODO: We need select expressions onto fields...
+    //  Why? Why can't we handle jus an entity source...
+    
+    for (const table of Object.values(schema.tables)) {
+        const fields: TypeFields = {};
 
-        const entity = new EntityIdentifier(table.name, type);
-        const from = new FromExpression(entity);
-        sources[name] = from;
-
-        for (const [name] of Object.entries(table.columns)) {
-            from.scalar(name);
+        for (const [name, { type: dbType }] of Object.entries(table.columns)) {
+            fields[name] = createType(dbType);
         }
+
+        for (const [linkName, { table: tbl }] of Object.entries(table.links)) {
+            fields[linkName] = () => entityTypes[tbl];
+        }
+
+        const type = new EntityType(fields);
+        entityTypes[table.name] = type;
     }
 
-    // Add the links
-    for (const [name, table] of Object.entries(schema.tables)) {
-        for (const [linkName, { table: tbl, columns }] of Object.entries(table.links)) {
-            const linkFields: LinkField[] = Object.entries(columns).map(([sourceName, joinedName]) => {
-                return {
-                    joinedName,
-                    sourceName,
-                }
-            });
 
-            sources[name].link(
-                linkName,
-                sources[tbl],
-                linkFields,
+    for (const [name, table] of Object.entries(schema.tables)) {
+        const fields: Field[] = [];
+
+        const entity = new EntityIdentifier(
+            table.name,
+            entityTypes[table.name],
+        );
+        entities[table.name] = entity;
+
+        for (const [name, column] of Object.entries(table.columns)) {
+            fields.push(
+                new Field(
+                    new FieldIdentifier(
+                        () => sources[table.name],
+                        column.name,
+                        createType(column.type),
+                    ),
+                    name,
+                )
             );
         }
+
+        for (const [linkName, { table: tableName, columns }] of Object.entries(table.links)) {
+            const clause = Object.entries(columns).reduce<LogicalExpression | BinaryExpression | undefined>((result, [sourceName, joinedName]) => {
+                const comparison = new BinaryExpression(
+                    new FieldIdentifier(() => sources[table.name], sourceName, () => sources[table.name].type[sourceName]),
+                    `==`,
+                    new FieldIdentifier(() => sources[tableName], joinedName, () => sources[tableName].type[joinedName]),
+                );
+
+                if (result === undefined) {
+                    return comparison;
+                }
+
+                return new LogicalExpression(result, `&&`, comparison);
+            }, undefined);
+
+            const linkedSource = new LinkedEntitySource(
+                () => sources[table.name],
+                () => sources[tableName],
+                clause || new BinaryExpression(
+                    new Literal(1),
+                    `==`,
+                    new Literal(1),
+                ),
+            );
+
+            fields.push(
+                new Field(
+                    linkedSource,
+                    linkName,
+                )
+            );
+        }
+
+        const source = new EntitySource(
+            entity,
+            new FieldSet(fields, () => entityTypes[table.name]),
+        );
+        sources[name] = source;
     }
 
     return sources;

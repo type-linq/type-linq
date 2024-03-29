@@ -1,13 +1,16 @@
 {
   "name": "type-linq",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "",
+  "private": true,
   "type": "module",
   "author": {
     "name": "Calvin Mann",
     "email": "calvinmann@gmail.com"
   },
-  "scripts": {},
+  "scripts": {
+    "watch": "tsc --watch --project tsconfig.json"
+  },
   "keywords": [],
   "license": "MIT",
   "devDependencies": {
@@ -20,10 +23,9 @@
     "tsx": "^4.7.1",
     "typescript": "^5.3.3"
   },
-  "dependencies": {
-    "@prisma/client": "^5.10.2"
-  },
   "workspaces": [
-    "packages/*"
+    "packages/query-tree",
+    "packages/core",
+    "packages/sqlite"
   ]
 }

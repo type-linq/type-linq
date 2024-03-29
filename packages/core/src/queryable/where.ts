@@ -1,9 +1,6 @@
 import {
-    Alias,
     BinaryExpression,
-    Expression,
     LogicalExpression,
-    Walker,
     WhereExpression,
 } from '@type-linq/query-tree';
 import { convert } from '../convert/convert.js';
@@ -14,14 +11,14 @@ import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
 
 export function where<TElement, TArgs extends Serializable | undefined = undefined>(
-    this: Queryable<TElement>,
+    source: Queryable<TElement>,
     predicate: Predicate<TElement, TArgs>,
     args?: TArgs,
 ) {
     const ast = parseFunction(predicate, 1, args);
     const vars = varsName(ast);
-    const sources = buildSources(ast, this.expression);
-    const globals: Globals = this.provider.globals;
+    const sources = buildSources(ast, source.expression);
+    const globals: Globals = source.provider.globals;
 
     // The where expression. This is the first parmeter
     // TODO: Why are the identifiers coming out of here not fully qualified?
@@ -39,21 +36,13 @@ export function where<TElement, TArgs extends Serializable | undefined = undefin
     }
 
     const where = new WhereExpression(
-        this.expression,
-        stripAlias(clause) as LogicalExpression | BinaryExpression,
+        source.expression,
+        clause,
     );
+
     return new Queryable<TElement>(
-        this.provider,
+        source.provider,
         where,
     );
 }
 
-function stripAlias(expression: Expression) {
-    return Walker.walkMutate(expression, (exp) => {
-        if (exp instanceof Alias) {
-            return exp.expression;
-        } else {
-            return exp;
-        }
-    });
-}

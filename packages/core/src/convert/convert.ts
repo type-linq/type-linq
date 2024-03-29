@@ -1,19 +1,21 @@
 import {
-    Alias,
     BinaryExpression,
     BinaryOperator,
     CallExpression,
     EntityType,
-    FieldIdentifier,
     GlobalIdentifier,
     Literal,
     LogicalExpression,
     LogicalOperator,
     Expression as QueryExpression,
-    SourceExpression,
+    Source,
     TernaryExpression,
     UnaryExpression,
     VariableExpression,
+    Field,
+    LinkedEntitySource,
+    EntitySource,
+    FieldIdentifier,
 } from '@type-linq/query-tree';
 import { readName } from './util.js';
 import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type.js';
@@ -230,7 +232,7 @@ export function convert(
         }
 
         switch (true) {
-            case source instanceof FieldIdentifier: {
+            case source instanceof Field: {
                 const type = source.type[name];
                 if (type === undefined) {
                     throw new Error(`Unable to find identifier "${name}" on field "${source.name}"`);
@@ -251,7 +253,7 @@ export function convert(
             case source instanceof LogicalExpression:
             case source instanceof TernaryExpression:
             case source instanceof UnaryExpression:
-            case source instanceof SourceExpression: {
+            case source instanceof Source: {
                 const result = processAccess(source, name) as QueryExpression;
                 return result;
             }
@@ -292,33 +294,53 @@ export function convert(
         }
 
         switch (true) {
-            case source instanceof SourceExpression: {
-                const field = source.field(name);
-                if (field === undefined) {
-                    throw new Error(`Unable to find identifier "${name}" on source`);
-                }
-                return field;
-            }
-            case source instanceof FieldIdentifier: {
-                const field = source.source.field(name);
-
+            case source instanceof LinkedEntitySource: {
+                const field = source.fieldSet.find(name);
                 if (field === undefined) {
                     throw new Error(`Unable to find identifier "${name}" on source`);
                 }
 
-                if (field instanceof FieldIdentifier) {
+                // Scalars
+                if (field.source instanceof FieldIdentifier) {
                     return new FieldIdentifier(
-                        field.source,
-                        field.name,
+                        new LinkedEntitySource(
+                            source.linked,
+                            field.source.source,
+                            source.clause,
+                        ),
+                        field.name.name,
                         field.type,
-                        [...source.implicitJoins, ...field.implicitJoins],
                     );
                 }
 
-                return field;
+                if (field.source instanceof EntitySource) {
+                    return new LinkedEntitySource(
+                        source,
+                        field.source,
+                        source.clause,
+                    );
+                }
+
+                if (field.source instanceof LinkedEntitySource) {
+                    // TODO: Test this
+                    return new LinkedEntitySource(
+                        source,
+                        field.source.source,
+                        field.source.clause,
+                    );
+                }
+
+                throw new Error(`Unexpected field source type "${field.source.constructor.name}" received`);
             }
-            case source instanceof Alias: {
-                return processAccess(source.expression, name);
+            case source instanceof Source: {
+                const field = source.fieldSet.find(name);
+                if (field === undefined) {
+                    throw new Error(`Unable to find identifier "${name}" on source`);
+                }
+                return field.source;
+            }
+            case source instanceof Field: {
+                return processAccess(source.source, name);
             }
             case source instanceof BinaryExpression:
             case source instanceof LogicalExpression:

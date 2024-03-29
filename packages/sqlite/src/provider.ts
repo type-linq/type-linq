@@ -8,10 +8,9 @@ import {
 import {
     Type,
     Expression,
-    ExpressionType,
     GlobalIdentifier,
     CallExpression,
-    Janitor,
+    Source,
 } from '@type-linq/query-tree';
 import { compile } from './compile.js';
 import { DatabaseSchema } from './schema.js';
@@ -38,7 +37,7 @@ export class SqliteProvider extends QueryProvider {
     }
 
     async *execute<TResult>(source: Queryable<TResult>): AsyncGenerator<TResult> {
-        const expression = Janitor.finalize(source.expression, true, true);
+        const expression = this.finalize(source.expression, true);
         const { sql, variables } = this.compile(expression);
 
         console.log(`Executing SQL`);
@@ -52,7 +51,7 @@ export class SqliteProvider extends QueryProvider {
         }
     }
 
-    compile(expression: Expression<ExpressionType>) {
+    compile(expression: Source) {
         const { sql, variables } = compile(expression);
         return { sql, variables };
     }
@@ -99,7 +98,7 @@ export class SqliteProvider extends QueryProvider {
         return undefined;
     }
 
-    #mapAccessor = (type: Type, object: Expression<ExpressionType>, name: string | symbol, args: Expression<ExpressionType>[]): GlobalIdentifier | CallExpression | undefined => {
+    #mapAccessor = (type: Type, object: Expression, name: string | symbol, args: Expression[]): GlobalIdentifier | CallExpression | undefined => {
         console.log(`mapAccessor`, type, object, name, args);
         return undefined;
     }

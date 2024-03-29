@@ -8,10 +8,7 @@ export type MathOperator = `+` | `-` | `*` | `/` | `%`;
 export type LogicalOperator = `||` | `&&` | `??`;
 export type BinaryOperator = EqualityOperator | ComparisonOperator | MathOperator | LogicalOperator;
 
-export abstract class BinaryExpressionBase<
-    TExpression extends string,
-    TOperator extends BinaryOperator,
-> extends Expression<TExpression> {
+export abstract class BinaryExpressionBase<TOperator extends BinaryOperator> extends Expression {
     left: Expression;
     operator: TOperator;
     right: Expression;
@@ -54,12 +51,46 @@ export abstract class BinaryExpressionBase<
                 throw new Error(`Unrecognized operator "${operator}" received`);
         }
     }
+
+    isEqual(expression?: Expression): boolean {
+        if (expression === this) {
+            return true;
+        }
+
+        if (expression instanceof BinaryExpressionBase === false) {
+            return false;
+        }
+        if (Object.getPrototypeOf(this) !== Object.getPrototypeOf(expression)) {
+            return false;
+        }
+
+        return this.operator === expression.operator &&
+            this.left.isEqual(expression.left) &&
+            this.right.isEqual(expression.right);
+    }
+
+    *walk() {
+        yield this.left;
+        yield this.right;
+    }
 }
 
-export class BinaryExpression extends BinaryExpressionBase<`BinaryExpression`, BinaryOperator> {
-    expressionType = 'BinaryExpression' as const;
+export class BinaryExpression extends BinaryExpressionBase<BinaryOperator> {
+    rebuild(left: Expression | undefined, right: Expression | undefined): Expression {
+        return new BinaryExpression(
+            left ?? this.left,
+            this.operator,
+            right ?? this.right,
+        );
+    }
 }
 
-export class LogicalExpression extends BinaryExpressionBase<`LogicalExpression`, LogicalOperator> {
-    expressionType = 'LogicalExpression' as const;
+export class LogicalExpression extends BinaryExpressionBase<LogicalOperator> {
+    rebuild(left: Expression | undefined, right: Expression | undefined): Expression {
+        return new LogicalExpression(
+            left ?? this.left,
+            this.operator,
+            right ?? this.right,
+        );
+    }
 }

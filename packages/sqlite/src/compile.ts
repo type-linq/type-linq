@@ -4,14 +4,9 @@ import {
     BinaryOperator,
     LogicalExpression,
     LogicalOperator,
-    EqualityOperator,
     CallExpression,
-    CaseBlock,
-    CaseExpression,
     Expression,
-    ExpressionType,
     GlobalIdentifier,
-    JoinClause,
     JoinExpression,
     Literal,
     SelectExpression,
@@ -20,10 +15,19 @@ import {
     VariableExpression,
     EntityIdentifier,
     FieldIdentifier,
-    FromExpression,
     WhereExpression,
     Walker,
-    Alias,
+    LiteralValue,
+    CallArguments,
+    SubSource,
+    EntitySource,
+    CaseBlock,
+    CaseBlocks,
+    CaseExpression,
+    FieldSet,
+    Source,
+    Field,
+    Identifier,
 } from '@type-linq/query-tree';
 
 export type SqlFragment = {
@@ -31,39 +35,126 @@ export type SqlFragment = {
     variables: Serializable[];
 }
 
-export function compile(expression: Expression<ExpressionType>): SqlFragment {
-    switch (expression.expressionType) {
-        case `BinaryExpression`: {
-            // TODO: Need to add brackets in the correct places
-            const binary = expression as BinaryExpression;
-            const { sql: left, variables: leftVariables } = compile(binary.left);
-            const { sql: right, variables: rightVariables } = compile(binary.right);
+// TODO: Go through and make sur we have all exprssion types
 
-            const sql = generateBinarySql(left, binary.operator, right);
+export function compile(expression: Source): SqlFragment {
+    let select: SelectExpression = undefined!;
+    let whereExpression: WhereExpression = undefined!;
+    const joinExpressions: JoinExpression[] = [];
+
+    Walker.walkSource(expression, (exp) => {
+        if (exp instanceof SelectExpression) {
+            if (select) {
+                throw new Error(`Mutliple SelectExpressions found on branch`);
+            }
+            select = exp;
+            return;
+        }
+
+        if (exp instanceof WhereExpression) {
+            if (whereExpression) {
+                throw new Error(`Mutliple WhereExpressions found on branch`);
+            }
+            whereExpression = exp;
+            return;
+        }
+
+        if (exp instanceof JoinExpression) {
+            joinExpressions.push(exp);
+            return;
+        }
+
+        throw new Error(`Unexpected source expression type "${exp.constructor.name}" received`);
+    });
+
+    if (select === undefined) {
+        throw new Error(`No SelectExpression was found on the branch`);
+    }
+
+    const fields = compileExpression(select.fieldSet);
+    const from = compileExpression(select.entity);    
+    const joins = joinExpressions.map(processJoinExpression);
+    const where = whereExpression ?
+        compileExpression(whereExpression.clause) :
+        undefined;
+    
+    const parts: string[] = [
+        `SELECT`,
+        fields.sql,
+        `FROM ${from.sql}`,
+        ...joins.map((jn) => jn.sql),
+    ];
+
+    if (where) {
+        parts.push(
+            `WHERE ${where.sql}`
+        );
+    }
+
+    return {
+        sql: parts.join(`\n`),
+        variables: [
+            ...fields.variables,
+            ...from.variables,
+            ...joins.map((jn) => jn.variables).flat(),
+            ...(where ? where.variables : []),
+        ]
+    };
+}
+
+function compileExpression(expression: Expression): SqlFragment {
+    // TODO: We need to handle aliasing!
+
+    switch (true) {
+        case expression instanceof JoinExpression:
+        case expression instanceof SelectExpression:
+        case expression instanceof WhereExpression:
+            throw new Error(`Expected "${expression.constructor.name}" to be handled externally`);
+
+        case expression instanceof EntitySource: {
+            return compileExpression(expression.entity);
+        }
+        case expression instanceof Field: {
+            const expr = compileExpression(expression.source);
+            const name = compileExpression(expression.name);
+
+            return {
+                sql: `${expr.sql} AS ${name.sql}`,
+                variables: [...expr.variables, ...name.variables],
+            };
+        }
+        case expression instanceof BinaryExpression: {
+            // TODO: Need to add brackets in the correct places
+            const { sql: left, variables: leftVariables } = compileExpression(expression.left);
+            const { sql: right, variables: rightVariables } = compileExpression(expression.right);
+
+            const sql = generateBinarySql(left, expression.operator, right);
             return {
                 sql,
                 variables: [...leftVariables, ...rightVariables],
             };
         }
-        case `LogicalExpression`: {
+        case expression instanceof LogicalExpression: {
             // TODO: Need to add brackets in the correct places
+            // TODO: We need to process logical expressions in a separate function to track
+            //  multiple expressions so we understand where to put the brackets.
+            const { sql: left, variables: leftVariables } = compileExpression(expression.left);
+            const { sql: right, variables: rightVariables } = compileExpression(expression.right);
 
-            const logical = expression as LogicalExpression;
-            const { sql: left, variables: leftVariables } = compile(logical.left);
-            const { sql: right, variables: rightVariables } = compile(logical.right);
-
-            const sql = generateLogicalSql(left, logical.operator, right);
+            const sql = generateLogicalSql(left, expression.operator, right);
             return {
                 sql,
                 variables: [...leftVariables, ...rightVariables],
             };
         }
-        case `VariableExpression`: {
-            const variable = expression as VariableExpression;
-            
+        case  expression instanceof SubSource: {
+            // TODO
+            throw new Error(`not implemented`);
+        }
+        case expression instanceof VariableExpression: {
             let value: Serializable;
-            if (variable.bound) {
-                value = variable.access() as Serializable;
+            if (expression.bound) {
+                value = expression.access() as Serializable;
             } else {
                 // TODO: late bound vars
                 throw new Error(`not implemented`);
@@ -73,87 +164,111 @@ export function compile(expression: Expression<ExpressionType>): SqlFragment {
                 variables: [value],
             };
         }
-        case `CallExpression`: {
-            const call = expression as CallExpression;
-            const callee = compile(call.callee);
-            const args = call.arguments.map(compile);
+        case expression instanceof CallExpression: {
+            const callee = compileExpression(expression.callee);
+            const args = compileExpression(expression.arguments);
 
-            const sql = `${callee.sql}(${args.map((a) => a.sql).join(`, `)})`;
+            const sql = `${callee.sql}(${args.sql})`;
             return {
                 sql,
                 variables: [
                     ...callee.variables,
-                    ...args.map((a) => a.variables).flat()
+                    ...args.variables,
                 ]
             }
         }
-        case `CaseBlock`:
-            return processCaseBlock(expression as CaseBlock);
-        case  `CaseExpression`:
-            return processCaseExpression(expression as CaseExpression);
-        case `GlobalIdentifier`:
+        case expression instanceof CallArguments: {
+            const args = expression.arguments.map(compileExpression);
+
+            const sql = args.map((a) => a.sql).join(`, `);
+            return {
+                sql,
+                variables: args.map((a) => a.variables).flat(),
+            }
+        }
+        case expression instanceof GlobalIdentifier:
             return {
                 sql: (expression as GlobalIdentifier).name,
                 variables: []
             };
-        case `EntityIdentifier`: {
+        case expression instanceof EntityIdentifier: {
             const exp = expression as EntityIdentifier;
             return {
                 sql: encodeIdentifier(exp.name),
                 variables: [],
             };
         }
-        case `FieldIdentifier`: {
+        case expression instanceof FieldIdentifier: {
             const exp = expression as FieldIdentifier;
-            const source = compile(exp.source);
+            const source = compileExpression(exp.source);
             return {
                 sql: `${source.sql}.${encodeIdentifier(exp.name)}`,
                 variables: [...source.variables],
             };
         }
-        case `Alias`: {
-            const exp = expression as Alias<Expression>;
-            const source = compile(exp.expression);
-            return {
-                sql: `${source.sql} AS ${encodeIdentifier(exp.alias)}`,
-                variables: [...source.variables],
-            };
-        }
-        case `JoinExpression`:
-            return processJoinExpression(expression as JoinExpression);
-        case `Literal`:
+        case expression instanceof Literal:
             return {
                 sql: encodePrimitive((expression as Literal).value),
                 variables: []
             };
-        case `SelectExpression`:
-            return processSelectExpression(expression as SelectExpression);
-        case `FromExpression`: {
-            const from = expression as FromExpression;
-            return compile(from.entity);
+        case expression instanceof FieldSet: {
+            const fields = expression.fields.map(compileExpression);
+            return {
+                sql: `\t${fields.map((fld) => fld.sql).join(`,\n\t`)}`,
+                variables: fields.map((fld) => fld.variables).flat(),
+            };
+
         }
-        case `WhereExpression`:
-            throw new Error(`Expected the select expression handler to handle the where expressions`);
-        case `TernaryExpression`: {
+        case expression instanceof CaseBlock: {
+            const test = compileExpression(expression.test);
+            const consequent = compileExpression(expression.consequent);
+            return {
+                sql: `WHEN ${test.sql} THEN ${consequent.sql}`,
+                variables: [...test.variables, ...consequent.variables],
+            };
+        }
+        case expression instanceof CaseBlocks: {
+            const blocks = expression.when.map(compileExpression);
+            return {
+                sql: blocks.map((block) => `\t${block.sql}`).join(`\n`),
+                variables: blocks.map((block) => block.variables).flat(),
+            };
+        }
+        case expression instanceof CaseExpression: {
+            const blocks = compileExpression(expression.when);
+            const alternate = compileExpression(expression.alternate);
+            return {
+                sql: `CASE\n${blocks.sql}\n\tELSE ${alternate.sql}\nEND`,
+                variables: [...blocks.variables, ...alternate.variables],
+            };
+        }
+        case expression instanceof TernaryExpression: {
+            // TODO: We need to processs ternaries separately so we can combine nested....
             const ternary = expression as TernaryExpression;
             const caseBlock = new CaseBlock(
                 ternary.test,
                 ternary.consequent,
             );
-
-            const caseExpression = new CaseExpression([caseBlock], ternary.alternate);
-            return compile(caseExpression);
+            const caseBlocks = new CaseBlocks([caseBlock]);
+            const caseExpression = new CaseExpression(caseBlocks, ternary.alternate);
+            return compileExpression(caseExpression);
         }
-        case `UnaryExpression`: {
+        case expression instanceof UnaryExpression: {
             const unary = expression as UnaryExpression;
-            const { sql, variables } = compile(unary.expression);
+            const { sql, variables } = compileExpression(unary.expression);
             return {
                 sql: `NOT ${sql}`,
                 variables: variables,
             };
         }
+        case expression instanceof Identifier: {
+            return {
+                sql: encodeIdentifier(expression.name),
+                variables: [],
+            };
+        }
         default:
-            throw new Error(`Unkown expression type "${expression.expressionType}" received`);
+            throw new Error(`Unkown expression type "${expression.constructor.name}" received`);
     }
 }
 
@@ -161,9 +276,13 @@ function encodeIdentifier(identifier: string) {
     return `[${identifier.replace(/\[/g, `[[`)}]`;
 }
 
-function encodePrimitive(value: string | number | boolean | null | undefined) {
+function encodePrimitive(value: LiteralValue) {
     if (value == null) {
         return `NULL`;
+    }
+
+    if (value instanceof Date) {
+        return encodePrimitive(value.toISOString());
     }
 
     if (typeof value !== `string`) {
@@ -173,52 +292,16 @@ function encodePrimitive(value: string | number | boolean | null | undefined) {
     return `'${value.replace(/'/g, `''`)}'`;
 }
 
-function processCaseBlock(block: CaseBlock): SqlFragment {
-    const test = compile(block.test);
-    const consequent = compile(block.consequent);
-    return {
-        sql: `WHEN ${test.sql} THEN ${consequent.sql}`,
-        variables: [...test.variables, ...consequent.variables],
-    };
-}
-
-function processCaseExpression(expression: CaseExpression): SqlFragment {
-    const blocks = expression.when.map(processCaseBlock);
-    const alternate = compile(expression.alternate);
-
-    return {
-        sql: `CASE\n\t${blocks.join(`\n\t`)}\n\tELSE ${alternate.sql}\nEND`,
-        variables: [...blocks.map((block) => block.variables).flat(), ...alternate.variables],
-    };
-}
-
-function processJoinClause(clause: JoinClause): SqlFragment {
-    const left = compile(clause.left);
-    const right = compile(clause.right);
-
-    const sql = generateJoinSql(left.sql, clause.operator, right.sql);
-    return {
-        sql,
-        variables: [...left.variables, ...right.variables],
-    };
-}
-
 function processJoinExpression(join: JoinExpression): SqlFragment {
-    const clauses = join.join.map(
-        (clause) => processJoinClause(clause)
-    );
-    const clausesSql = clauses
-        .map((clause) => clause.sql)
-        .join(`\n\tAND `);
-
-    const inner = compile(join.joined);
-    const sql = `JOIN ${inner.sql} ON\n\t${clausesSql}`;
+    const clause = compileExpression(join.condition);
+    const inner = compileExpression(join.joined);
+    const sql = `JOIN ${inner.sql}\n\tON ${clause.sql}`;
 
     return {
         sql,
         variables: [
             ...inner.variables,
-            ...clauses.map((clause) => clause.variables).flat()
+            ...clause.variables,
         ],
     };
 }
@@ -250,7 +333,7 @@ function generateBinarySql(left: string, operator: BinaryOperator, right: string
         case `!=`:
             return `${left} != ${right}`;
         case `==`:
-            return `${left} == ${right}`;
+            return `${left} = ${right}`;
         default:
             throw new Error(`Operator "${operator}" is not supported`);
     }
@@ -269,70 +352,3 @@ function generateLogicalSql(left: string, operator: LogicalOperator, right: stri
     }
 }
 
-function generateJoinSql(left: string, operator: EqualityOperator, right: string) {
-    if (operator !== `==`) {
-        throw new Error(`Unsupported operator "${operator}" received`);
-    }
-
-    return `${left} = ${right}`;
-}
-
-function processSelectExpression(select: SelectExpression): SqlFragment {
-    const fields = select.fieldsArray.map((field) => {
-        const compiled = compile(field);
-        return compiled;
-    });
-
-    const joins = Walker.collectBranch(select, (exp) => {
-        return exp instanceof JoinExpression;
-    });
-
-    const wheres = Walker.collectBranch(select, (exp) => {
-        return exp instanceof WhereExpression;
-    }) as WhereExpression[];
-
-    const firstWhere = wheres.shift();
-    const combinedClause = firstWhere &&
-        wheres.reduce(
-            (result, where) => new LogicalExpression(
-                result,
-                `&&`,
-                where.clause
-            ),
-            firstWhere.clause,
-        );
-
-    const from = Walker.source(select);
-
-    const compiledJoins = joins.map(compile);
-    const compiledWhere = combinedClause && compile(
-        combinedClause
-    );
-    const compiledFrom = compile(from);
-
-    const parts = [
-        `SELECT ${fields.map((f) => f.sql).join(`, `)}`,
-        `FROM ${compiledFrom.sql}`,
-        ...compiledJoins.map((j) => j.sql),
-    ].filter(Boolean);
-
-    if (compiledWhere) {
-        parts.push(`WHERE ${compiledWhere.sql}`);
-    }
-
-    const sql = parts.join(`\n`);
-    const variables = [
-        ...fields.map((f) => f.variables).flat(),
-        ...compiledFrom.variables,
-        ...compiledJoins.map((j) => j.variables).flat(),
-    ];
-
-    if (compiledWhere) {
-        variables.push(...compiledWhere.variables);
-    }
-
-    return {
-        sql,
-        variables,
-    };
-}
