@@ -7,12 +7,13 @@ export abstract class QueryProvider {
     abstract globals: Globals;
 
     finalize(source: Source, forceScalars = false): Source {
+        // TODO: Add bounding when we join linked sources
+
         const whereClauses: (LogicalExpression | BinaryExpression)[] = [];
 
         const expression = Walker.mapSource(source, (exp) => {
             if (exp instanceof WhereExpression) {
                 whereClauses.push(exp.clause);
-                return exp.source;
             }
 
             let expression: Expression;
@@ -36,44 +37,60 @@ export abstract class QueryProvider {
                     return exp;
             }
 
-            // TODO: We only want link sources from the fields... we need to
-            //  stop collecting at any EntitySource!
-            // TODO: We need to remove the linked sources! Or just ignore them later?
-
-            // TODO: Looks like we need a special field walker....
-            // Basically something that won't walk fieldSet (unless it's the root)
+            // TODO: Want these joins to be first.....
 
             const linkedSources = Walker.collect(
                 expression,
-                (exp, ctx) => {
-                    if (exp instanceof LinkedEntitySource) {
-                        console.log(ctx);
-                    }
-                    return exp instanceof LinkedEntitySource;
-                },
+                (exp) => exp instanceof LinkedEntitySource,
                 undefined,
-                (exp, ctx) => ctx.depth === 0 ?
-                    false :
-                    exp instanceof FieldSet
+                // We don't want to walk FieldSet's since that will be circular
+                (exp, ctx) => ctx.depth === 0 ? false : exp instanceof FieldSet
             ).filter(
+                // Make sure they are unique
                 (ele, idx, arr) => arr.findIndex((item) => item.isEqual(ele)) === idx
             ) as LinkedEntitySource[];
 
             if (linkedSources.length === 0) {
+                if (exp instanceof WhereExpression) {
+                    return exp.source;
+                }
                 return exp;
             }
 
-            let current: Source = exp;
+            let current: Source;
+            if (exp instanceof JoinExpression) {
+                current = exp.source;
+            } else if (exp instanceof WhereExpression) {
+                current = exp.source;
+            } else {
+                current = exp;
+            }
+
             for (const source of linkedSources) {
-                current = processLinked.call(this, source);
+                current = processLinked(this, source);
+            }
+
+            if (exp instanceof JoinExpression) {
+                return new JoinExpression(
+                    current,
+                    exp.joined,
+                    exp.condition,
+                );
+            } else {
+                return current;
             }
 
             return current;
 
-            function processLinked(this: QueryProvider, linked: LinkedEntitySource) {
+            function processLinked(provider: QueryProvider, linked: LinkedEntitySource) {
                 if (linked.linked instanceof EntitySource === false) {
-                    processLinked.call(this, linked.linked);
+                    processLinked(provider, linked.linked);
                 }
+
+                // TODO: This doesn't work... we need the clause bound!
+                // const 
+                // TODO: Bound joined
+                // linked.source
 
                 return new JoinExpression(
                     current,

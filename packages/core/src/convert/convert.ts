@@ -16,6 +16,7 @@ import {
     LinkedEntitySource,
     EntitySource,
     FieldIdentifier,
+    Boundary,
 } from '@type-linq/query-tree';
 import { readName } from './util.js';
 import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type.js';
@@ -300,12 +301,16 @@ export function convert(
                     throw new Error(`Unable to find identifier "${name}" on source`);
                 }
 
+                const src = field.source instanceof Boundary ?
+                    field.source.expression :
+                    field.source;
+
                 // Scalars
-                if (field.source instanceof FieldIdentifier) {
+                if (src instanceof FieldIdentifier) {
                     return new FieldIdentifier(
                         new LinkedEntitySource(
                             source.linked,
-                            field.source.source,
+                            src.source,
                             source.clause,
                         ),
                         field.name.name,
@@ -313,24 +318,24 @@ export function convert(
                     );
                 }
 
-                if (field.source instanceof EntitySource) {
+                if (src instanceof EntitySource) {
                     return new LinkedEntitySource(
                         source,
-                        field.source,
+                        src,
                         source.clause,
                     );
                 }
 
-                if (field.source instanceof LinkedEntitySource) {
+                if (src instanceof LinkedEntitySource) {
                     // TODO: Test this
                     return new LinkedEntitySource(
                         source,
-                        field.source.source,
-                        field.source.clause,
+                        src.source,
+                        src.clause,
                     );
                 }
 
-                throw new Error(`Unexpected field source type "${field.source.constructor.name}" received`);
+                throw new Error(`Unexpected field source type "${src.constructor.name}" received`);
             }
             case source instanceof Source: {
                 const field = source.fieldSet.find(name);

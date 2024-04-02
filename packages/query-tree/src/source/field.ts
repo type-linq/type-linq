@@ -1,6 +1,7 @@
 import { Expression } from '../expression.js';
 import { Identifier } from '../identifier.js';
 import { EntityType, Type, TypeFields, isEqual } from '../type.js';
+import { randString } from '../util.js';
 
 export class Field extends Expression {
     readonly name: Identifier;
@@ -50,6 +51,13 @@ export class Field extends Expression {
 
     rebuild(source: Expression | undefined): Field {
         return new Field(source ?? this.source, this.name.name);
+    }
+
+    boundary(boundaryId?: string) {
+        return new Field(
+            new Boundary(this.source, boundaryId),
+            this.name.name,
+        );
     }
 }
 
@@ -159,5 +167,50 @@ export class FieldSet extends Expression {
         }
 
         return new FieldSet(fields);
+    }
+
+    boundary(boundaryId: string) {
+        return new FieldSet(
+            this.fields.map(
+                (field) => field.boundary(boundaryId)
+            ),
+            this.type,
+        )
+    }
+}
+
+export class Boundary<TExpression extends Expression = Expression> extends Expression {
+    readonly identifier: string;
+    readonly expression: TExpression;
+
+    get type() {
+        return this.expression.type;
+    }
+
+    constructor(expression: TExpression, identifier = randString()) {
+        super();
+        this.expression = expression;
+        this.identifier = identifier;
+    }
+
+    isEqual(expression?: Expression | undefined): boolean {
+        if (expression === this) {
+            return true;
+        }
+
+        if (expression instanceof Boundary === false) {
+            return false;
+        }
+
+        return this.identifier === expression.identifier &&
+            this.expression.isEqual(expression.expression);
+    }
+
+    protected rebuild(expression: Expression): Expression {
+        return new Boundary(expression, this.identifier);
+    }
+
+    *walk() {
+        yield this.expression;
     }
 }

@@ -1,7 +1,6 @@
 import { Expression } from './expression.js';
 import { EntitySource, LinkedEntitySource } from './index.js';
 import { EntityType, Type, UnknownType, isEqual } from './type.js';
-import { randString } from './util.js';
 
 export class Identifier extends Expression {
     readonly name: string;
@@ -57,18 +56,15 @@ export class GlobalIdentifier extends Identifier {
 }
 
 export class EntityIdentifier extends Identifier {
-    readonly identifier: string;
-
     readonly #type: Type;
 
     get type() {
         return this.#type;
     }
 
-    constructor(name: string, type: EntityType, identifier = randString()) {
+    constructor(name: string, type: EntityType) {
         super(name);
         this.#type = type;
-        this.identifier = identifier;
     }
 
     *walk() { }

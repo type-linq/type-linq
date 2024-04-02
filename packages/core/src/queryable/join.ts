@@ -8,10 +8,11 @@ import {
     JoinExpression,
     Source,
     EntitySource,
+    Boundary,
 } from '@type-linq/query-tree';
 
 import { convert } from '../convert/convert.js';
-import { readName } from '../convert/util.js';
+import { randString, readName } from '../convert/util.js';
 import { Expression as AstExpression } from '../type.js';
 import { Merge, Map as ValueMap, Serializable, ExpressionTypeKey } from '../type.js';
 import { parseFunction } from './parse.js';
@@ -45,15 +46,18 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
 
     const globals: Globals = outer.provider.globals;
 
+    const boundaryId = randString();
+    const boundedInner = innerExpression.boundary(boundaryId);
+
     const outerColumns = processKey(outerAst, outerExpression);
-    const innerColumns = processKey(innerAst, innerExpression);
+    const innerColumns = processKey(innerAst, boundedInner);
 
     const condition = createJoinClause(outerColumns, innerColumns);
 
-    let innerSource = Walker.find(innerExpression, (exp) => exp instanceof SelectExpression) as SelectExpression | undefined;
+    let innerSource = Walker.find(boundedInner, (exp) => exp instanceof SelectExpression) as SelectExpression | undefined;
     if (innerSource === undefined) {
-        if (innerExpression instanceof EntitySource) {
-            innerSource = innerExpression;
+        if (boundedInner instanceof EntitySource) {
+            innerSource = boundedInner;
         }
     }
 
@@ -63,12 +67,12 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
 
     const joinExpression = new JoinExpression(
         outerExpression,
-        innerSource.entity,
+        new Boundary(innerSource.entity, boundaryId),
         condition,
     );
 
     const fieldSet = transformSelect(
-        [outerExpression, innerExpression],
+        [outerExpression, boundedInner],
         resultAst,
         outer.provider.globals,
     );

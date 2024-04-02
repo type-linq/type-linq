@@ -66,6 +66,7 @@ export class LinkedEntitySource extends Source {
             if (result === undefined) {
                 throw new Error(`Unable to get source`);
             }
+            this.#source = result;
             return result;
         } else {
             return this.#source;
@@ -78,6 +79,7 @@ export class LinkedEntitySource extends Source {
             if (result === undefined) {
                 throw new Error(`Unable to get linked`);
             }
+            this.#linked = result;
             return result;
         } else {
             return this.#linked;

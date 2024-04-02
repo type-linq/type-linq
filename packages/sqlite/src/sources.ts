@@ -80,7 +80,7 @@ export function buildSources(schema: DatabaseSchema) {
 
             const linkedSource = new LinkedEntitySource(
                 () => sources[table.name],
-                () => sources[tableName],
+                () => sources[tableName].boundary(),
                 clause || new BinaryExpression(
                     new Literal(1),
                     `==`,

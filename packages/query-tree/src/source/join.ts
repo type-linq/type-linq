@@ -1,10 +1,11 @@
 import { BinaryExpression, LogicalExpression } from '../binary.js';
 import { Expression } from '../expression.js';
 import { EntityIdentifier } from '../identifier.js';
+import { Boundary } from './field.js';
 import { Source } from './source.js';
 
 export class JoinExpression extends Source {
-    readonly joined: EntityIdentifier;
+    readonly joined: EntityIdentifier | Boundary<EntityIdentifier>;
     readonly condition: BinaryExpression | LogicalExpression;
 
     get source() {
@@ -15,7 +16,7 @@ export class JoinExpression extends Source {
         return this.source.fieldSet;
     }
 
-    constructor(source: Source, joined: EntityIdentifier, condition: BinaryExpression | LogicalExpression) {
+    constructor(source: Source, joined: EntityIdentifier | Boundary<EntityIdentifier>, condition: BinaryExpression | LogicalExpression) {
         super(source);
         this.joined = joined;
         this.condition = condition;

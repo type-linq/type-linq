@@ -18,9 +18,6 @@ export function select<TElement, TMapped, TArgs = undefined>(
     map: Map<TElement, TMapped>,
     args?: TArgs,
 ) {
-    // TODO: We need to get linked sources from source fields
-    //  So they get copied across
-
     const ast = parseFunction(map, 1, args);3
 
     const transformed = transformSelect(

@@ -28,11 +28,19 @@ import {
     Source,
     Field,
     Identifier,
+    Boundary,
 } from '@type-linq/query-tree';
 
 export type SqlFragment = {
     sql: string;
     variables: Serializable[];
+}
+
+type CompileInfo = {
+    boundary: string[];
+    alias: Record<string, string>;
+    count: Record<string, number>;
+    aliasSource?: boolean;
 }
 
 // TODO: Go through and make sur we have all exprssion types
@@ -71,11 +79,17 @@ export function compile(expression: Source): SqlFragment {
         throw new Error(`No SelectExpression was found on the branch`);
     }
 
-    const fields = compileExpression(select.fieldSet);
-    const from = compileExpression(select.entity);    
-    const joins = joinExpressions.map(processJoinExpression);
+    const info: CompileInfo = {
+        alias: {},
+        boundary: [],
+        count: {},
+    };
+
+    const fields = compileExpression(select.fieldSet, info);
+    const from = compileExpression(select.entity, info);
+    const joins = joinExpressions.reverse().map((exp) => processJoinExpression(exp, info));
     const where = whereExpression ?
-        compileExpression(whereExpression.clause) :
+        compileExpression(whereExpression.clause, info) :
         undefined;
     
     const parts: string[] = [
@@ -102,7 +116,7 @@ export function compile(expression: Source): SqlFragment {
     };
 }
 
-function compileExpression(expression: Expression): SqlFragment {
+function compileExpression(expression: Expression, info: CompileInfo): SqlFragment {
     // TODO: We need to handle aliasing!
 
     switch (true) {
@@ -112,12 +126,17 @@ function compileExpression(expression: Expression): SqlFragment {
             throw new Error(`Expected "${expression.constructor.name}" to be handled externally`);
 
         case expression instanceof EntitySource: {
-            return compileExpression(expression.entity);
+            return compileExpression(expression.entity, info);
+        }
+        case expression instanceof Boundary: {
+            return compileExpression(expression.expression, {
+                ...info,
+                boundary: [...info.boundary, expression.identifier]
+            });
         }
         case expression instanceof Field: {
-            const expr = compileExpression(expression.source);
-            const name = compileExpression(expression.name);
-
+            const expr = compileExpression(expression.source, info);
+            const name = compileExpression(expression.name, info);
             return {
                 sql: `${expr.sql} AS ${name.sql}`,
                 variables: [...expr.variables, ...name.variables],
@@ -125,8 +144,8 @@ function compileExpression(expression: Expression): SqlFragment {
         }
         case expression instanceof BinaryExpression: {
             // TODO: Need to add brackets in the correct places
-            const { sql: left, variables: leftVariables } = compileExpression(expression.left);
-            const { sql: right, variables: rightVariables } = compileExpression(expression.right);
+            const { sql: left, variables: leftVariables } = compileExpression(expression.left, info);
+            const { sql: right, variables: rightVariables } = compileExpression(expression.right, info);
 
             const sql = generateBinarySql(left, expression.operator, right);
             return {
@@ -138,8 +157,8 @@ function compileExpression(expression: Expression): SqlFragment {
             // TODO: Need to add brackets in the correct places
             // TODO: We need to process logical expressions in a separate function to track
             //  multiple expressions so we understand where to put the brackets.
-            const { sql: left, variables: leftVariables } = compileExpression(expression.left);
-            const { sql: right, variables: rightVariables } = compileExpression(expression.right);
+            const { sql: left, variables: leftVariables } = compileExpression(expression.left, info);
+            const { sql: right, variables: rightVariables } = compileExpression(expression.right, info);
 
             const sql = generateLogicalSql(left, expression.operator, right);
             return {
@@ -165,8 +184,8 @@ function compileExpression(expression: Expression): SqlFragment {
             };
         }
         case expression instanceof CallExpression: {
-            const callee = compileExpression(expression.callee);
-            const args = compileExpression(expression.arguments);
+            const callee = compileExpression(expression.callee, info);
+            const args = compileExpression(expression.arguments, info);
 
             const sql = `${callee.sql}(${args.sql})`;
             return {
@@ -178,7 +197,7 @@ function compileExpression(expression: Expression): SqlFragment {
             }
         }
         case expression instanceof CallArguments: {
-            const args = expression.arguments.map(compileExpression);
+            const args = expression.arguments.map((arg) => compileExpression(arg, info));
 
             const sql = args.map((a) => a.sql).join(`, `);
             return {
@@ -192,15 +211,31 @@ function compileExpression(expression: Expression): SqlFragment {
                 variables: []
             };
         case expression instanceof EntityIdentifier: {
-            const exp = expression as EntityIdentifier;
+            const boundId = [...info.boundary, expression.name].join(`/`);
+            let alias = expression.name;
+            if (info.alias[boundId]) {
+                alias = info.alias[boundId];
+            } else {
+                info.count[expression.name] = info.count[expression.name] || 0;
+                alias = defaultNamer(expression.name, info.count[expression.name]++);
+                info.alias[boundId] = alias;
+            }
+
+            if (info.aliasSource) {
+                return {
+                    sql: `${encodeIdentifier(expression.name)} AS ${encodeIdentifier(alias)}`,
+                    variables: [],
+                };
+            }
+
             return {
-                sql: encodeIdentifier(exp.name),
+                sql: encodeIdentifier(alias),
                 variables: [],
             };
         }
         case expression instanceof FieldIdentifier: {
             const exp = expression as FieldIdentifier;
-            const source = compileExpression(exp.source);
+            const source = compileExpression(exp.source, info);
             return {
                 sql: `${source.sql}.${encodeIdentifier(exp.name)}`,
                 variables: [...source.variables],
@@ -212,7 +247,7 @@ function compileExpression(expression: Expression): SqlFragment {
                 variables: []
             };
         case expression instanceof FieldSet: {
-            const fields = expression.fields.map(compileExpression);
+            const fields = expression.fields.map((field) => compileExpression(field, info));
             return {
                 sql: `\t${fields.map((fld) => fld.sql).join(`,\n\t`)}`,
                 variables: fields.map((fld) => fld.variables).flat(),
@@ -220,23 +255,23 @@ function compileExpression(expression: Expression): SqlFragment {
 
         }
         case expression instanceof CaseBlock: {
-            const test = compileExpression(expression.test);
-            const consequent = compileExpression(expression.consequent);
+            const test = compileExpression(expression.test, info);
+            const consequent = compileExpression(expression.consequent, info);
             return {
                 sql: `WHEN ${test.sql} THEN ${consequent.sql}`,
                 variables: [...test.variables, ...consequent.variables],
             };
         }
         case expression instanceof CaseBlocks: {
-            const blocks = expression.when.map(compileExpression);
+            const blocks = expression.when.map((when) => compileExpression(when, info));
             return {
                 sql: blocks.map((block) => `\t${block.sql}`).join(`\n`),
                 variables: blocks.map((block) => block.variables).flat(),
             };
         }
         case expression instanceof CaseExpression: {
-            const blocks = compileExpression(expression.when);
-            const alternate = compileExpression(expression.alternate);
+            const blocks = compileExpression(expression.when, info);
+            const alternate = compileExpression(expression.alternate, info);
             return {
                 sql: `CASE\n${blocks.sql}\n\tELSE ${alternate.sql}\nEND`,
                 variables: [...blocks.variables, ...alternate.variables],
@@ -251,11 +286,11 @@ function compileExpression(expression: Expression): SqlFragment {
             );
             const caseBlocks = new CaseBlocks([caseBlock]);
             const caseExpression = new CaseExpression(caseBlocks, ternary.alternate);
-            return compileExpression(caseExpression);
+            return compileExpression(caseExpression, info);
         }
         case expression instanceof UnaryExpression: {
             const unary = expression as UnaryExpression;
-            const { sql, variables } = compileExpression(unary.expression);
+            const { sql, variables } = compileExpression(unary.expression, info);
             return {
                 sql: `NOT ${sql}`,
                 variables: variables,
@@ -292,9 +327,12 @@ function encodePrimitive(value: LiteralValue) {
     return `'${value.replace(/'/g, `''`)}'`;
 }
 
-function processJoinExpression(join: JoinExpression): SqlFragment {
-    const clause = compileExpression(join.condition);
-    const inner = compileExpression(join.joined);
+function processJoinExpression(join: JoinExpression, info: CompileInfo): SqlFragment {
+    const clause = compileExpression(join.condition, info);
+    const inner = compileExpression(join.joined, {
+        ...info,
+        aliasSource: true,
+    });
     const sql = `JOIN ${inner.sql}\n\tON ${clause.sql}`;
 
     return {
@@ -352,3 +390,9 @@ function generateLogicalSql(left: string, operator: LogicalOperator, right: stri
     }
 }
 
+function defaultNamer(name: string, count: number) {
+    if (count === 0) {
+        return name;
+    }
+    return `${name}_${count}`;
+}

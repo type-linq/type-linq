@@ -1,4 +1,5 @@
 import { Expression } from '../expression.js';
+import { boundary } from '../util.js';
 import { FieldSet } from './field.js';
 
 export abstract class Source extends Expression {
@@ -21,5 +22,9 @@ export abstract class Source extends Expression {
     constructor(source?: Source) {
         super();
         this.#source = source;
+    }
+
+    boundary(boundaryId?: string): this {
+        return boundary(this, boundaryId);
     }
 }
