@@ -2,7 +2,7 @@ import { Expression, ExpressionTypeKey } from '../type.js';
 
 export function readName(expression: Expression<ExpressionTypeKey>) {
     if (expression.type !== `Identifier` && expression.type !== `Literal`) {
-        throw new Error(`Expected expression to be Identifier or Literal`);
+        throw new Error(`Expected expression to be Identifier or Literal. Got "${expression.type}"`);
     }
     if (expression.type === `Identifier`) {
         return expression.name;

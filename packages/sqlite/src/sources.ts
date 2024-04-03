@@ -13,6 +13,8 @@ import {
     BinaryExpression,
     Literal,
     LinkedEntitySource,
+    Type,
+    WhereClause,
 } from '@type-linq/query-tree';
 
 import { DatabaseSchema } from './schema.js';
@@ -64,11 +66,11 @@ export function buildSources(schema: DatabaseSchema) {
         }
 
         for (const [linkName, { table: tableName, columns }] of Object.entries(table.links)) {
-            const clause = Object.entries(columns).reduce<LogicalExpression | BinaryExpression | undefined>((result, [sourceName, joinedName]) => {
+            const clause = Object.entries(columns).reduce<WhereClause | undefined>((result, [sourceName, joinedName]) => {
                 const comparison = new BinaryExpression(
-                    new FieldIdentifier(() => sources[table.name], sourceName, () => sources[table.name].type[sourceName]),
+                    new FieldIdentifier(() => sources[table.name], sourceName, () => sources[table.name].type[sourceName] as Type),
                     `==`,
-                    new FieldIdentifier(() => sources[tableName], joinedName, () => sources[tableName].type[joinedName]),
+                    new FieldIdentifier(() => sources[tableName], joinedName, () => sources[tableName].type[joinedName] as Type),
                 );
 
                 if (result === undefined) {

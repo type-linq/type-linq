@@ -7,8 +7,9 @@ export type MathOperator = `+` | `-` | `*` | `/` | `%`;
 
 export type LogicalOperator = `||` | `&&` | `??`;
 export type BinaryOperator = EqualityOperator | ComparisonOperator | MathOperator | LogicalOperator;
+export type MatchOperator = `start` | `in` | `end`;
 
-export abstract class BinaryExpressionBase<TOperator extends BinaryOperator> extends Expression {
+export abstract class BinaryExpressionBase<TOperator extends string> extends Expression {
     left: Expression;
     operator: TOperator;
     right: Expression;
@@ -45,6 +46,11 @@ export abstract class BinaryExpressionBase<TOperator extends BinaryOperator> ext
                 break;
             case `||`:
             case `&&`:
+                this.type = new BooleanType();
+                break;
+            case `start`:
+            case `in`:
+            case `end`:
                 this.type = new BooleanType();
                 break;
             default:
@@ -88,6 +94,23 @@ export class BinaryExpression extends BinaryExpressionBase<BinaryOperator> {
 export class LogicalExpression extends BinaryExpressionBase<LogicalOperator> {
     rebuild(left: Expression | undefined, right: Expression | undefined): Expression {
         return new LogicalExpression(
+            left ?? this.left,
+            this.operator,
+            right ?? this.right,
+        );
+    }
+}
+
+export class MatchExpression extends BinaryExpressionBase<MatchOperator> {
+    escape?: string;
+
+    constructor(left: Expression, operator: MatchOperator, right: Expression, escape?: string) {
+        super(left, operator, right);
+        this.escape = escape;
+    }
+
+    rebuild(left: Expression | undefined, right: Expression | undefined): Expression {
+        return new MatchExpression(
             left ?? this.left,
             this.operator,
             right ?? this.right,

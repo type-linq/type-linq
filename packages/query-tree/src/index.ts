@@ -2,6 +2,7 @@ export * from './source/index.js';
 export * from './binary.js';
 export * from './call.js';
 export * from './case.js';
+export * from './cast.js';
 export * from './expression.js';
 export * from './identifier.js';
 export * from './literal.js';

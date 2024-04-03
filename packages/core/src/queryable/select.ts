@@ -1,4 +1,12 @@
-import { EntitySource, Field, FieldSet, SelectExpression, Source, Walker } from '@type-linq/query-tree';
+import {
+    EntitySource,
+    Field,
+    FieldSet,
+    SelectExpression,
+    Source,
+    Walker
+} from '@type-linq/query-tree';
+
 import { convert } from '../convert/convert.js';
 import { readName } from '../convert/util.js';
 import { Queryable } from './queryable.js';
@@ -6,6 +14,7 @@ import {
     Expression as AstExpression,
     ExpressionTypeKey as AstExpressionTypeKey,
     Map,
+    Serializable,
 } from '../type.js';
 import { parseFunction } from './parse.js';
 import { Globals } from '../convert/global.js';
@@ -13,17 +22,18 @@ import { buildSources, varsName } from './util.js';
 
 export const SCALAR_NAME = `__scalar__11cbd49f`;
 
-export function select<TElement, TMapped, TArgs = undefined>(
+export function select<TElement, TMapped>(
     source: Queryable<TElement>,
     map: Map<TElement, TMapped>,
-    args?: TArgs,
+    args?: Serializable,
 ) {
-    const ast = parseFunction(map, 1, args);3
+    const ast = parseFunction(map, 1, args);
 
     const transformed = transformSelect(
         [source.expression],
         ast,
         source.provider.globals,
+        args,
     );
 
     let entitySource: SelectExpression | EntitySource | undefined;
@@ -59,6 +69,7 @@ export function transformSelect(
     sources: Source[],
     expression: AstExpression<`ArrowFunctionExpression`>,
     globals?: Globals,
+    args?: Serializable,
 ): FieldSet {
     const vars = varsName(expression);
     const sourceMap = buildSources(expression, ...sources);
@@ -86,13 +97,14 @@ export function transformSelect(
                 return new FieldSet(fields);
             }
             default: {
-                const fields = processField(expression.body);
+                const name = readScalarName(expression.body);
+                const fields = processField(expression.body, name);
                 return new FieldSet(fields);
             }
         }
     }
 
-    function processField(expression: AstExpression<AstExpressionTypeKey>, name = SCALAR_NAME): Field | Field[] {
+    function processField(expression: AstExpression<AstExpressionTypeKey>, name: string): Field | Field[] {
         switch (expression.type) {
             case `Identifier`: {
                 // We have a single identifier which is a source
@@ -116,9 +128,24 @@ export function transformSelect(
             expression,
             vars,
             globals,
+            args,
+            { convertLogical: true },
         );
 
         return new Field(converted, name);
+    }
+
+    function readScalarName(expression: AstExpression<AstExpressionTypeKey>) {
+        switch (expression.type) {
+            case `MemberExpression`:
+                return readName(expression.property) as string;
+            case `Literal`:
+                return String(expression.value);
+            case `CallExpression`:
+                return readScalarName(expression.callee);
+            default:
+                return SCALAR_NAME;
+        }
     }
 }
 

@@ -9,6 +9,7 @@ import {
     Source,
     EntitySource,
     Boundary,
+    WhereClause,
 } from '@type-linq/query-tree';
 
 import { convert } from '../convert/convert.js';
@@ -25,13 +26,13 @@ import { Queryable } from './queryable.js';
 //  1. A function that will return a logical expression used to join
 //  2. A result selector
 
-export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable | undefined = undefined>(
+export function join<TOuter, TInner, TKey, TResult>(
     outer: Queryable<TOuter>,
     inner: Queryable<TInner>,
     outerKey: ValueMap<TOuter, TKey>,
     innerKey: ValueMap<TInner, TKey>,
     result: Merge<TOuter, TInner, TResult>,
-    args?: TArgs,
+    args?: Serializable,
 ): Source {
     if (outer.provider !== inner.provider) {
         throw new Error(`Must join sources with the same provider`);
@@ -75,6 +76,7 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
         [outerExpression, boundedInner],
         resultAst,
         outer.provider.globals,
+        args,
     );
 
     // Now swap out any existing select
@@ -92,7 +94,6 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
     return expression;
 
     function processKey(expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]): Field | Field[] {
-        // TODO: These sources need to be the identifiers!
         const sourceMap = buildSources(expression, ...sources);
         const vars = varsName(expression);
 
@@ -111,8 +112,21 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
                         return processKeyValue(property.value, name, vars, sourceMap);
                     }
                 );
-            default:
-                return processKeyValue(expression.body, SCALAR_NAME, vars, sourceMap);
+            default: {
+                let name: string;
+                switch (expression.body.type) {
+                    case `MemberExpression`:
+                        name = readName(expression.body.property) as string;
+                        break;
+                    case `Literal`:
+                        name = String(expression.body.value);
+                        break;
+                    default:
+                        name = SCALAR_NAME;
+                        break;
+                }
+                return processKeyValue(expression.body, name, vars, sourceMap);
+            }
         }
     }
 
@@ -144,7 +158,7 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
         return new Field(converted, name);
     }
 
-    function createJoinClause(outer: Field | Field[], inner: Field | Field[]): BinaryExpression | LogicalExpression {
+    function createJoinClause(outer: Field | Field[], inner: Field | Field[]): WhereClause {
         if (Array.isArray(outer) && Array.isArray(inner)) {
             return buildJoinClauses(outer, inner);
         } else if (Array.isArray(outer) === false && Array.isArray(inner) === false) {
@@ -158,12 +172,12 @@ export function join<TOuter, TInner, TKey, TResult, TArgs extends Serializable |
         }
     }
 
-    function buildJoinClauses(outer: Field[], inner: Field[]): BinaryExpression | LogicalExpression {
+    function buildJoinClauses(outer: Field[], inner: Field[]): WhereClause {
         if (outer.length !== inner.length) {
             throw new Error(`The inner and outer keys returned different number of columns to match on`);
         }
 
-        let current: BinaryExpression | LogicalExpression | undefined = undefined;
+        let current: WhereClause | undefined = undefined;
         for (const outerColumm of outer) {
             const innerColumn = inner.find(
                 (column) => column.name === outerColumm.name

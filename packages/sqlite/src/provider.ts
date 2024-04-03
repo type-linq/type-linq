@@ -8,12 +8,25 @@ import {
 import {
     Type,
     Expression,
-    GlobalIdentifier,
-    CallExpression,
     Source,
+    StringType,
+    NumberType,
+    BooleanType,
+    DateType,
+    NullType,
+    FunctionType,
+    BinaryType,
+    UnknownType,
+    EntityType,
+    UnionType,
 } from '@type-linq/query-tree';
 import { compile } from './compile.js';
 import { DatabaseSchema } from './schema.js';
+import { identifier as stringIdentifier, accessor as stringAccessor } from './global/string.js';
+import { identifier as mathIdentifier } from './global/math.js';
+import { identifier as numberIdentifier, accessor as numberAccessor } from './global/number.js';
+import { accessor as booleanAccessor } from './global/boolean.js';
+import { accessor as dateAccessor, identifier as dateIdentifier } from './global/date.js';
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;
@@ -30,6 +43,7 @@ export class SqliteProvider extends QueryProvider {
         this.globals = {
             mapAccessor: this.#mapAccessor,
             mapIdentifier: this.#mapIdentifier,
+            hasIdentifier: this.#hasIdentifier,
         };
 
         this.#dbFile = db;
@@ -40,10 +54,10 @@ export class SqliteProvider extends QueryProvider {
         const expression = this.finalize(source.expression, true);
         const { sql, variables } = this.compile(expression);
 
-        console.log(`Executing SQL`);
-        console.log(sql);
-        console.log(variables);
-        console.log(`=======================================`);
+        console.debug(`Executing SQL`);
+        console.debug(sql);
+        console.debug(variables);
+        console.debug(`=======================================`);
 
         const results = await this.run<TResult>(sql, variables);
         for (const result of results) {
@@ -79,8 +93,6 @@ export class SqliteProvider extends QueryProvider {
             return;
         }
 
-        console.log(this.#dbFile);
-
         this.#db = await new Promise((resolve, reject) => {
             const result = new sqlite3.Database(this.#dbFile, (error) => {
                 if (error) {
@@ -92,15 +104,67 @@ export class SqliteProvider extends QueryProvider {
         });
     }
 
-    #mapIdentifier = (...path: string[]): GlobalIdentifier | undefined => {
-        console.log(`mapIdentifier`, path);
-        // throw new Error(`not implemented`);
-        return undefined;
+    #hasIdentifier = (path: string): boolean => {
+        switch (path) {
+            case `Math`:
+            case `Number`:
+            case `String`:
+            case `Date`:
+                return true;
+            default:
+                return false;
+        }
     }
 
-    #mapAccessor = (type: Type, object: Expression, name: string | symbol, args: Expression[]): GlobalIdentifier | CallExpression | undefined => {
-        console.log(`mapAccessor`, type, object, name, args);
-        return undefined;
+    #mapIdentifier = (path: string[], args: Expression[]): Expression | undefined => {
+        if (path.length === 0) {
+            throw new Error(`Received empty path`);
+        }
+
+        switch (path[0]) {
+            case `Math`:
+                return mathIdentifier(path.slice(1));
+            case `Number`:
+                return numberIdentifier(path.slice(1), args);
+            case `String`:
+                return stringIdentifier(path.slice(1), args);
+            case `Date`:
+                return dateIdentifier(path.slice(1));
+            default:
+                return undefined;
+        }
+    }
+
+    #mapAccessor = (type: Type, object: Expression, name: string | symbol, args: Expression[]): Expression | undefined => {
+        switch (true) {
+            case type instanceof StringType:
+                return stringAccessor(object, name, args);
+            case type instanceof NumberType:
+                return numberAccessor(object, name, args);
+            case type instanceof BooleanType:
+                return booleanAccessor(object, name, args);
+            case type instanceof DateType:
+                return dateAccessor(object, name, args);
+            case type instanceof UnionType:
+                // TODO
+                // What kinds of accessors work on union type...
+                //  maybe toString?
+                // It would be a bit tough since something like toString
+                //  returns a different expression for Date....
+                //  We could check that all expressions match?
+                //      And if an expression doesn't exist?
+                //          ignore it?
+                throw new Error(`not implemented`);
+            case type instanceof NullType:
+            case type instanceof FunctionType:
+            case type instanceof BinaryType:
+            case type instanceof UnknownType:
+            case type instanceof EntityType:
+                return undefined;
+            default:
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                throw new Error(`Unknown type "${(type as any).constructor.name}" received`);
+        }
     }
 }
 

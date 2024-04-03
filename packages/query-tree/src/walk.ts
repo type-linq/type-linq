@@ -59,24 +59,26 @@ export class Walker {
         expression: Expression,
         visitor: Visitor<TContext, Expression>,
         context?: TContext,
+        ignore: (expression: Expression, context: VisitorContext<TContext>) => boolean = () => false,
     ): Expression {
         return map(expression, visitor, {
             context,
             depth: 0,
             parent: undefined,
-        });
+        }, ignore);
     }
 
     static mapSource<TContext>(
         expression: Source,
         visitor: Visitor<TContext, Source, Source>,
         context?: TContext,
+        ignore: (expression: Expression, context: VisitorContext<TContext>) => boolean = () => false,
     ): Source {
         return mapSource(expression, visitor, {
             context,
             depth: 0,
             parent: undefined,
-        });
+        }, ignore);
     }
 
     static find<TContext = void>(
@@ -206,7 +208,12 @@ function map<TContext>(
     expression: Expression,
     visitor: Visitor<TContext, Expression>,
     context: VisitorContext<TContext>,
+    ignore: (expression: Expression, context: VisitorContext<TContext>) => boolean,
 ): Expression {
+    if (ignore(expression, context)) {
+        return expression;
+    }
+
     if (alreadyVisited(expression, context)) {
         const result = visitor(expression, context);
         return result;
@@ -222,7 +229,7 @@ function map<TContext>(
     }
 
     const expressions = Array.from(expression.walk()).map(
-        (exp) => map(exp, visitor, ctx)
+        (exp) => map(exp, visitor, ctx, ignore)
     );
 
     const mutated = expression.mutate(expressions);
@@ -234,7 +241,12 @@ function mapSource<TContext>(
     expression: Source,
     visitor: Visitor<TContext, Source, Source>,
     context: VisitorContext<TContext>,
+    ignore: (expression: Expression, context: VisitorContext<TContext>) => boolean,
 ): Source {
+    if (ignore(expression, context)) {
+        return expression;
+    }
+
     const ctx: VisitorContext<TContext> = {
         context: context.context,
         depth: context.depth + 1,
@@ -248,7 +260,7 @@ function mapSource<TContext>(
         return visitor(expression, ctx);
     }
 
-    const source = mapSource(expression.source, visitor, ctx);
+    const source = mapSource(expression.source, visitor, ctx, ignore);
 
     //  All source expressions who have a source take that parameter
     //  as the first.... Bit of a hack but oh well...

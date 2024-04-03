@@ -6,7 +6,7 @@ export class Identifier extends Expression {
     readonly name: string;
 
     get type() {
-        return new UnknownType();
+        return new UnknownType() as Type;
     }
 
     constructor(name: string) {

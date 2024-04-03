@@ -1,12 +1,12 @@
-import { BinaryExpression, LogicalExpression } from '../binary.js';
 import { Expression } from '../expression.js';
 import { EntityIdentifier } from '../identifier.js';
 import { Boundary } from './field.js';
 import { Source } from './source.js';
+import { WhereClause } from './where.js';
 
 export class JoinExpression extends Source {
     readonly joined: EntityIdentifier | Boundary<EntityIdentifier>;
-    readonly condition: BinaryExpression | LogicalExpression;
+    readonly condition: WhereClause;
 
     get source() {
         return super.source!;
@@ -16,7 +16,7 @@ export class JoinExpression extends Source {
         return this.source.fieldSet;
     }
 
-    constructor(source: Source, joined: EntityIdentifier | Boundary<EntityIdentifier>, condition: BinaryExpression | LogicalExpression) {
+    constructor(source: Source, joined: EntityIdentifier | Boundary<EntityIdentifier>, condition: WhereClause) {
         super(source);
         this.joined = joined;
         this.condition = condition;
@@ -39,7 +39,7 @@ export class JoinExpression extends Source {
     protected rebuild(
         source: Source | undefined,
         joined: EntityIdentifier | undefined,
-        condition: LogicalExpression | BinaryExpression | undefined
+        condition: WhereClause | undefined
     ): Expression {
         return new JoinExpression(
             source ?? this.source,

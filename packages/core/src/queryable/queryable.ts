@@ -18,7 +18,7 @@ export class Queryable<TElement> {
         return this.provider.execute(this);
     }
 
-    select<TMapped, TArgs = undefined>(map: Map<TElement, TMapped>, args?: TArgs) {
+    select<TMapped>(map: Map<TElement, TMapped>, args?: Serializable) {
         return select(this, map, args);
     }
 

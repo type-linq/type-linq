@@ -1,6 +1,4 @@
 import {
-    CallExpression,
-    GlobalIdentifier,
     Expression as QueryExpression,
     Type,
     isScalar,
@@ -8,15 +6,15 @@ import {
 
 import { Expression, ExpressionTypeKey } from '../type.js';
 import { expressionRoot, walkLeaf } from '../walk.js';
-import { readName } from './util.js';
 
 export type Globals = {
     // TODO: We have no way to exclude identifiers!
-    mapIdentifier(...path: string[]): GlobalIdentifier | undefined;
-    mapAccessor(type: Type, object: QueryExpression, name: string | symbol, args: QueryExpression[]): GlobalIdentifier | CallExpression | undefined;
+    hasIdentifier(basePath: string): boolean;
+    mapIdentifier(path: string[], args: QueryExpression[]): QueryExpression | undefined;
+    mapAccessor(type: Type, object: QueryExpression, name: string | symbol, args: QueryExpression[]): QueryExpression | undefined;
 };
 
-export function mapGlobal(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals): GlobalIdentifier {
+export function mapGlobalIdentifier(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals, args: QueryExpression[]): QueryExpression {
     const source = expressionRoot(expression);
     if (!isGlobalIdentifier(source, globals)) {
         throw new Error(`Expected an expression with a global at it's source to be supplied`);
@@ -26,18 +24,10 @@ export function mapGlobal(expression: Expression<`MemberExpression` | `Identifie
     walkLeaf(expression, (exp) => {
         if (exp.type === `Identifier`) {
             path.push(exp.name as string);
-        } else if (exp.type === `MemberExpression`) {
-            const name = readName(exp.property);
-            path.push(name as string);
-        } else {
-            throw new Error(
-                `Unexpected Expression type "${exp.type}" received (Expected ` +
-                    `Identifier or MemberExpression)`
-            );
         }
     });
 
-    const exp = globals.mapIdentifier(...path);
+    const exp = globals.mapIdentifier(path, args);
 
     if (exp === undefined) {
         throw new Error(`Unable to find global ${path.join(`.`)}`);
@@ -65,7 +55,7 @@ export function isGlobalIdentifier(expression: Expression<ExpressionTypeKey>, gl
         return false;
     }
 
-    const global = globals.mapIdentifier(source.name);
+    const global = globals.hasIdentifier(source.name);
     return Boolean(global);
 }
 
@@ -79,7 +69,7 @@ export function mapGlobalAccessor(
         return undefined;
     }
 
-    if (!object.type[name] || !isScalar(object.type[name]!)) {
+    if (!object.type[name] || !isScalar(object.type[name] as Type)) {
         throw new Error(`Can only map global accessors to scalar types`);
     }
 

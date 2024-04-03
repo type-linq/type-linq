@@ -1,6 +1,7 @@
 import {
     BinaryExpression,
     LogicalExpression,
+    MatchExpression,
     WhereExpression,
 } from '@type-linq/query-tree';
 import { convert } from '../convert/convert.js';
@@ -20,8 +21,6 @@ export function where<TElement, TArgs extends Serializable | undefined = undefin
     const sources = buildSources(ast, source.expression);
     const globals: Globals = source.provider.globals;
 
-    // The where expression. This is the first parmeter
-    // TODO: Why are the identifiers coming out of here not fully qualified?
     const clause = convert(
         sources,
         ast.body,
@@ -31,8 +30,16 @@ export function where<TElement, TArgs extends Serializable | undefined = undefin
     );
 
     // TODO: Should we accept literal true or false?
-    if (clause instanceof LogicalExpression === false && clause instanceof BinaryExpression === false) {
-        throw new Error(`Expected the where predicate to return a LogicalExpression or BinaryExpression. Got ${clause.constructor.name}`);
+    switch (true) {
+        case clause instanceof LogicalExpression:
+        case clause instanceof BinaryExpression:
+        case clause instanceof MatchExpression:
+            break;
+        default:
+            throw new Error(
+                `Expected the where predicate to return a LogicalExpression, ` +
+                    `BinaryExpression or MatchExpression. Got ${clause.constructor.name}`
+            );
     }
 
     const where = new WhereExpression(

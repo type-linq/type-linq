@@ -13,15 +13,19 @@ export class StringType {
     get startsWith() { return  new FunctionType(new BooleanType()) }
     get endsWith() { return  new FunctionType(new BooleanType()) }
     get includes() { return  new FunctionType(new BooleanType()) }
+    get trim() { return  new FunctionType(new StringType()) }
     get trimStart() { return  new FunctionType(new StringType()) }
     get trimEnd() { return  new FunctionType(new StringType()) }
     get replace() { return  new FunctionType(new StringType()) }
-
 }
 
 export class NumberType {
     readonly [name: string]: Type | undefined;
+
     get toString() { return new FunctionType(new StringType()) }
+    get toExponential() { return new FunctionType(new NumberType()) }
+    get toFixed() { return new FunctionType(new NumberType()) }
+    get toPrecision() { return new FunctionType(new NumberType()) }
 }
 
 export class BooleanType {
@@ -32,12 +36,10 @@ export class BooleanType {
 export class DateType {
     readonly [name: string]: Type | undefined;
     get toString() { return new FunctionType(new StringType()) }
-    get valueOf() { return new FunctionType(new NumberType()) }
 }
 
 export class BinaryType {
     readonly [name: string]: Type | undefined;
-    get toString() { return new FunctionType(new StringType()) }
 }
 
 export class NullType {
@@ -61,7 +63,6 @@ export class EntityType {
     readonly [name: string]: Type | undefined;
 
     constructor(fields: TypeFields) {
-
         for (const [name, type] of Object.entries(fields)) {
             if (typeof type === `function`) {
                 Object.defineProperty(this, name, {

@@ -1,8 +1,8 @@
-import { BinaryExpression, LogicalExpression } from '../binary.js';
 import { Expression } from '../expression.js';
 import { EntityIdentifier } from '../identifier.js';
 import { FieldSet } from './field.js';
 import { Source } from './source.js';
+import { WhereClause } from './where.js';
 
 export class EntitySource extends Source {
 
@@ -58,7 +58,7 @@ export class EntitySource extends Source {
 export class LinkedEntitySource extends Source {
     #source: EntitySource | (() => EntitySource);
     #linked: EntitySource | LinkedEntitySource | (() => EntitySource | LinkedEntitySource);
-    clause: BinaryExpression | LogicalExpression;
+    clause: WhereClause;
 
     get source() {
         if (typeof this.#source === `function`) {
@@ -93,7 +93,7 @@ export class LinkedEntitySource extends Source {
     constructor(
         linked: EntitySource | LinkedEntitySource | (() => EntitySource | LinkedEntitySource),
         source: EntitySource | (() => EntitySource),
-        clause: BinaryExpression | LogicalExpression,
+        clause: WhereClause,
     ) {
         super();
         this.#linked = linked;
@@ -118,7 +118,7 @@ export class LinkedEntitySource extends Source {
     protected rebuild(
         linked: EntitySource | undefined,
         source: EntitySource | undefined,
-        clause: BinaryExpression | LogicalExpression | undefined
+        clause: WhereClause | undefined
     ): Expression {
         return new LinkedEntitySource(
             linked ?? this.linked,

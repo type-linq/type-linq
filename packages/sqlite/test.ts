@@ -6,8 +6,8 @@ import { DatabaseSchema, buildSchemaFile, fetchSchema } from './src/schema.js';
 const DB = `D:\\Projects\\type-linq\\packages\\sqlite\\resources\\northwind.db`;
 
 (async function () {
-    const schema = await fetchSchema(DB);
-    console.log(buildSchemaFile(schema));
+    // const schema = await fetchSchema(DB);
+    // console.log(buildSchemaFile(schema));
 }());
 
 // TODO: Generate these types automatically
@@ -203,36 +203,61 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     const recordLevel = 10;
     const arg = `M`;
 
-    const query1 = products;
+    // const query1 = products;
 
-    // TODO: Why is the column in the where clause not fully qualified?
-    //  There must be somewhere we are not adding scope to the identifier...?
+    // // TODO: Why is the column in the where clause not fully qualified?
+    // //  There must be somewhere we are not adding scope to the identifier...?
 
-    const query2 = products
+    // const query2 = products
+    //     .select((c) => ({
+    //         productId: c.ProductID,
+    //         name: c.ProductName,
+    //         supplier: c.Supplier.CompanyName,
+    //     }))
+    //     // .select((c) => ({
+    //     //     productId: c.productId,
+    //     //     name: c.name,
+    //     //     supplier: c.supplier,
+    //     // }))
+    //     .where((c) => c.supplier > arg, { arg })
+    //     .join(
+    //         suppliers,
+    //         (c) => c.supplier,
+    //         (c) => c.CompanyName,
+    //         (outer, inner) => ({
+    //             productId: outer.productId,
+    //             name: outer.name,
+    //             supplier: outer.supplier,
+    //             supplierId: inner.SupplierID,
+    //         })
+    //     )
+
+    // const query3 = suppliers
+    //     .where((c) => c.CompanyName.length > 10);
+
+    // const query4 = products
+    //     .where((c) => c.Supplier.CompanyName.length > 10);
+
+    // const query5 = suppliers
+    //     .select((c) => c.CompanyName.trim())
+
+    // TODO: Sort out ??
+
+    // TODO: Dodgy SQL
+    const query6 = products
         .select((c) => ({
-            productId: c.ProductID,
             name: c.ProductName,
-            supplier: c.Supplier.CompanyName,
-        }))
-        // .select((c) => ({
-        //     productId: c.productId,
-        //     name: c.name,
-        //     supplier: c.supplier,
-        // }))
-        .where((c) => c.supplier > arg, { arg })
-        .join(
-            suppliers,
-            (c) => c.supplier,
-            (c) => c.CompanyName,
-            (outer, inner) => ({
-                productId: outer.productId,
-                name: outer.name,
-                supplier: outer.supplier,
-                supplierId: inner.SupplierID,
-            })
-        )
+            stock: c.UnitsInStock!.toExponential(),
+            time: Date.now(),
+        }));
 
-    for await (const product of query2) {
+    // const query7 = products
+    //     .select((c) => ({
+    //         name: c.ProductName,
+    //         stock: Math.max(c.UnitsInStock!, 10),
+    //     }))
+
+    for await (const product of query6) {
         console.dir(product);
     }
 

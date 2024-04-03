@@ -1,9 +1,11 @@
-import { BinaryExpression, LogicalExpression } from '../binary.js';
+import { BinaryExpression, LogicalExpression, MatchExpression } from '../binary.js';
 import { Source } from './source.js';
 import { Expression } from '../expression.js';
 
+export type WhereClause = LogicalExpression | BinaryExpression | MatchExpression;
+
 export class WhereExpression extends Source {
-    readonly clause: LogicalExpression | BinaryExpression;
+    readonly clause: WhereClause;
     
     get source() {
         return super.source!;
@@ -15,7 +17,7 @@ export class WhereExpression extends Source {
 
     constructor(
         source: Source,
-        clause: LogicalExpression | BinaryExpression,
+        clause: WhereClause,
     ) {
         super(source);
         this.clause = clause;
@@ -36,7 +38,7 @@ export class WhereExpression extends Source {
 
     rebuild(
         source: Source | undefined,
-        clause: LogicalExpression | BinaryExpression | undefined,
+        clause: WhereClause | undefined,
     ): Expression {
         return new WhereExpression(
             source ?? this.source,

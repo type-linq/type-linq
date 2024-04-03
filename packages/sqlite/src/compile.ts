@@ -29,6 +29,19 @@ import {
     Field,
     Identifier,
     Boundary,
+    MatchExpression,
+    CastExpression,
+    Type,
+    StringType,
+    NumberType,
+    BooleanType,
+    DateType,
+    BinaryType,
+    NullType,
+    FunctionType,
+    EntityType,
+    UnknownType,
+    UnionType,
 } from '@type-linq/query-tree';
 
 export type SqlFragment = {
@@ -41,6 +54,12 @@ type CompileInfo = {
     alias: Record<string, string>;
     count: Record<string, number>;
     aliasSource?: boolean;
+    aliasField?: boolean;
+
+    // TODO: Something to know to process logical with ands and ors
+    //  or with binary operators?
+    //  Or.... in places (like field select) where we don't need it, get
+    //      the convert step to produce BinaryExpressions?
 }
 
 // TODO: Go through and make sur we have all exprssion types
@@ -53,9 +72,20 @@ export function compile(expression: Source): SqlFragment {
     Walker.walkSource(expression, (exp) => {
         if (exp instanceof SelectExpression) {
             if (select) {
-                throw new Error(`Mutliple SelectExpressions found on branch`);
+                throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
             }
             select = exp;
+            return;
+        }
+
+        if (exp instanceof EntitySource) {
+            if (select) {
+                throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
+            }
+            select = new SelectExpression(
+                exp.entity,
+                exp.fieldSet.scalars(),
+            );
             return;
         }
 
@@ -85,7 +115,10 @@ export function compile(expression: Source): SqlFragment {
         count: {},
     };
 
-    const fields = compileExpression(select.fieldSet, info);
+    const fields = compileExpression(select.fieldSet, {
+        ...info,
+        aliasField: true,
+    });
     const from = compileExpression(select.entity, info);
     const joins = joinExpressions.reverse().map((exp) => processJoinExpression(exp, info));
     const where = whereExpression ?
@@ -117,13 +150,15 @@ export function compile(expression: Source): SqlFragment {
 }
 
 function compileExpression(expression: Expression, info: CompileInfo): SqlFragment {
-    // TODO: We need to handle aliasing!
-
     switch (true) {
         case expression instanceof JoinExpression:
         case expression instanceof SelectExpression:
-        case expression instanceof WhereExpression:
-            throw new Error(`Expected "${expression.constructor.name}" to be handled externally`);
+        case expression instanceof WhereExpression: {
+            if (expression.fieldSet.scalar) {
+                return compileExpression(expression.fieldSet.field.source, info);
+            }
+            throw new Error(`Expected "${expression.constructor.name}". Expected expression to be handled externally`);
+        }
 
         case expression instanceof EntitySource: {
             return compileExpression(expression.entity, info);
@@ -136,6 +171,10 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
         }
         case expression instanceof Field: {
             const expr = compileExpression(expression.source, info);
+            if (!info.aliasField) {
+                return expr;
+            }
+            
             const name = compileExpression(expression.name, info);
             return {
                 sql: `${expr.sql} AS ${name.sql}`,
@@ -163,6 +202,34 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             const sql = generateLogicalSql(left, expression.operator, right);
             return {
                 sql,
+                variables: [...leftVariables, ...rightVariables],
+            };
+        }
+        case expression instanceof MatchExpression: {
+            const { sql: left, variables: leftVariables } = compileExpression(expression.left, info);
+            const { sql: right, variables: rightVariables } = compileExpression(expression.right, info);
+
+            let match: string;
+            switch (expression.operator) {
+                case `start`:
+                    match = `${right} || '%'`;
+                    break;
+                case `end`:
+                    match = `'%' || ${right}`;
+                    break;
+                case `in`:
+                    match = `'%' || ${right} || '%'`;
+                    break;
+                default:
+                    throw new Error(`Unknown MatchExpression operator "${expression.operator}" received`);
+            }
+
+            const escape = expression.escape ?
+                ` ESCAPE '${expression.escape}'` :
+                ``;
+
+            return {
+                sql: `${left} LIKE ${match}${escape}`,
                 variables: [...leftVariables, ...rightVariables],
             };
         }
@@ -221,7 +288,8 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
                 info.alias[boundId] = alias;
             }
 
-            if (info.aliasSource) {
+            // TODO: Add a way to force alias
+            if (info.aliasSource && alias !== expression.name) {
                 return {
                     sql: `${encodeIdentifier(expression.name)} AS ${encodeIdentifier(alias)}`,
                     variables: [],
@@ -260,6 +328,15 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             return {
                 sql: `WHEN ${test.sql} THEN ${consequent.sql}`,
                 variables: [...test.variables, ...consequent.variables],
+            };
+        }
+        case expression instanceof CastExpression: {
+            const exp = compileExpression(expression.expression, info);
+            const type = sqlType(expression.type);
+
+            return {
+                sql: `CAST(${exp.sql} AS ${type})`,
+                variables: exp.variables,
             };
         }
         case expression instanceof CaseBlocks: {
@@ -356,6 +433,8 @@ function generateBinarySql(left: string, operator: BinaryOperator, right: string
             return `${left} >= ${right}`;
         case `&&`:
             return `(CASE ${left} WHEN NULL THEN NULL WHEN '' THEN '' WHEN 0 THEN 0 ELSE ${right} END)`;
+        case `||`:
+            return `(CASE ${left} WHEN NULL THEN ${right} WHEN '' THEN ${right} WHEN 0 THEN ${right} ELSE ${left} END)`;
         case `-`:
             return `${left} - ${right}`;
         case `+`:
@@ -395,4 +474,28 @@ function defaultNamer(name: string, count: number) {
         return name;
     }
     return `${name}_${count}`;
+}
+
+function sqlType(type: Type) {
+    switch (true) {
+        case type instanceof StringType:
+            return `TEXT`;
+        case type instanceof NumberType:
+            return `REAL`;
+        case type instanceof BooleanType:
+            return `INTEGER`;
+        case type instanceof DateType:
+            // TODO: Needs to be configurable
+            return `TEXT`;
+        case type instanceof BinaryType:
+        case type instanceof NullType:
+        case type instanceof FunctionType:
+        case type instanceof EntityType:
+        case type instanceof UnknownType:
+        case type instanceof UnionType:
+            throw new Error(`Unable to convert "${type.constructor.name}" to a SQL type`);
+        default:
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            throw new Error(`Unknown type "${(type as any).constructor.name}" received`);
+    }
 }

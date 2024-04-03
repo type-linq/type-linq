@@ -1,6 +1,6 @@
 import { Expression } from '../expression.js';
 import { Identifier } from '../identifier.js';
-import { EntityType, Type, TypeFields, isEqual } from '../type.js';
+import { EntityType, Type, TypeFields, isEqual, isScalar } from '../type.js';
 import { randString } from '../util.js';
 
 export class Field extends Expression {
@@ -176,6 +176,13 @@ export class FieldSet extends Expression {
             ),
             this.type,
         )
+    }
+
+    scalars() {
+        const fields = this.fields.filter(
+            (field) => isScalar(field.type)
+        );
+        return new FieldSet(fields);
     }
 }
 

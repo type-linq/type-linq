@@ -17,12 +17,19 @@ import {
     EntitySource,
     FieldIdentifier,
     Boundary,
+    FunctionType,
+    CallArguments,
 } from '@type-linq/query-tree';
 import { readName } from './util.js';
 import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type.js';
 import { walk } from '../walk.js';
-import { Globals, isGlobalIdentifier, mapGlobal, mapGlobalAccessor } from './global.js';
+import { Globals, isGlobalIdentifier, mapGlobalIdentifier, mapGlobalAccessor } from './global.js';
 export type Sources = Record<string | symbol, QueryExpression>;
+
+export type ConvertOptions = {
+    /** Whether to convert LogicalExpressions to BinaryExpressions */
+    convertLogical?: boolean;
+};
 
 export function convert(
     sources: Sources,
@@ -30,6 +37,7 @@ export function convert(
     varsName?: string | symbol,
     globals?: Globals,
     args?: Serializable,
+    options?: ConvertOptions,
 ): QueryExpression {
     return process(expression);
 
@@ -50,11 +58,19 @@ export function convert(
                     process(expression.right),
                 );
             case `LogicalExpression`:
-                return new LogicalExpression(
-                    process(expression.left),
-                    convertLogicalOperator(expression.operator),
-                    process(expression.right),
-                );
+                if (options?.convertLogical) {
+                    return new BinaryExpression(
+                        process(expression.left),
+                        convertLogicalOperator(expression.operator),
+                        process(expression.right),
+                    );
+                } else {
+                    return new LogicalExpression(
+                        process(expression.left),
+                        convertLogicalOperator(expression.operator),
+                        process(expression.right),
+                    );
+                }
             case `ConditionalExpression`: {
                 const test = process(expression.test);
                 const consequent = process(expression.consequent);
@@ -164,7 +180,7 @@ export function convert(
         }
 
         if (isGlobalIdentifier(expression, globals)) {
-            const exp = mapGlobal(expression, globals!);
+            const exp = mapGlobalIdentifier(expression, globals!, []);
             if (exp === undefined) {
                 throw new Error(`Unable to map global expression`);
             }
@@ -204,27 +220,41 @@ export function convert(
     }
 
     function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression {
-        if (expression.callee.type !== `MemberExpression`) {
-            throw new Error(`Expected CallExpression to always act on a MemberExpression`);
-        }
-
-        const name = readName(expression.callee.property);
-        const callee = process(expression.callee.object);
         const args = expression.arguments.map(process);
 
-        if (typeof name === `symbol`) {
-            throw new Error(`Unexpected symbol property name "${String(name)}" recieved`);
+        if (expression.callee.type === `MemberExpression` && isGlobalIdentifier(expression.callee, globals)) {
+            const exp = mapGlobalIdentifier(expression.callee, globals!, args);
+            if (exp === undefined) {
+                throw new Error(`Unable to map global expression`);
+            }
+            return exp;
         }
 
-        const exp = mapGlobalAccessor(callee, name, args, globals);
+        const callee = process(expression.callee);
 
-        if (exp === undefined) {
-            throw new Error(`Unable to map global expression "${String(name)}" onto type ${callee.type.name}`);
+        if (callee.type instanceof FunctionType === false) {
+            if (args.length !== 0) {
+                throw new Error(`Received non function type as callee, but args were supplied`);
+            }
+            return callee;
         }
-        return exp;
+
+        return new CallExpression(
+            callee.type.returnType,
+            callee,
+            new CallArguments(args),
+        );
     }
 
     function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression {
+        if (isGlobalIdentifier(expression, globals)) {
+            const exp = mapGlobalIdentifier(expression, globals!, []);
+            if (exp === undefined) {
+                throw new Error(`Unable to map global expression`);
+            }
+            return exp;
+        }
+
         const source = process(expression.object);
         const name = readName(expression.property);
 
@@ -233,7 +263,8 @@ export function convert(
         }
 
         switch (true) {
-            case source instanceof Field: {
+            case source instanceof Field:
+            case source instanceof FieldIdentifier: {
                 const type = source.type[name];
                 if (type === undefined) {
                     throw new Error(`Unable to find identifier "${name}" on field "${source.name}"`);
@@ -285,11 +316,15 @@ export function convert(
         }
 
         if (source.type instanceof EntityType === false) {
+            const src = source instanceof Source ?
+                source.fieldSet.field :
+                source;
+
             // Either a scalar or a union. In both cases we will
             //  be accessing a globally mapped accessor
-            const exp = mapGlobalAccessor(source, name, [], globals);
+            const exp = mapGlobalAccessor(src, name, [], globals);
             if (exp === undefined) {
-                throw new Error(`Unable to map MemberExpression to global`);
+                throw new Error(`Unable to map MemberExpression to global (Trying to map "${name}" to "${src.type.constructor.name}")`);
             }
             return exp;
         }
