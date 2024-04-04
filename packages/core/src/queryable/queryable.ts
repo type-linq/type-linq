@@ -4,6 +4,7 @@ import { select } from './select.js';
 import { where } from './where.js';
 import { join } from './join.js';
 import { Map, Merge, Predicate, Serializable } from '../type.js';
+import { SchemaType, StandardType } from '../schema-type.js';
 
 export class Queryable<TElement> {
     readonly provider: QueryProvider;
@@ -18,19 +19,19 @@ export class Queryable<TElement> {
         return this.provider.execute(this);
     }
 
-    select<TMapped>(map: Map<TElement, TMapped>, args?: Serializable) {
+    select<TMapped>(map: Map<SchemaType<TElement>, TMapped>, args?: Serializable) {
         return select(this, map, args);
     }
 
-    where<TArgs extends Serializable | undefined = undefined>(predicate: Predicate<TElement, TArgs>, args?: TArgs) {
+    where<TArgs extends Serializable | undefined = undefined>(predicate: Predicate<SchemaType<TElement>, TArgs>, args?: TArgs) {
         return where(this, predicate, args);
     }
 
     join<TInner, TKey, TResult, TArgs extends Serializable | undefined = undefined>(
         inner: Queryable<TInner>,
-        outerKey: Map<TElement, TKey>,
-        innerKey: Map<TInner, TKey>,
-        result: Merge<TElement, TInner, TResult>,
+        outerKey: Map<SchemaType<TElement>, TKey>,
+        innerKey: Map<SchemaType<TInner>, TKey>,
+        result: Merge<SchemaType<TElement>, SchemaType<TInner>, TResult>,
         args?: TArgs,
     ) {
         const expression = join(
@@ -42,6 +43,6 @@ export class Queryable<TElement> {
             args,
         );
 
-        return new Queryable<TResult>(this.provider, expression);
+        return new Queryable<StandardType<TResult>>(this.provider, expression);
     }
 }

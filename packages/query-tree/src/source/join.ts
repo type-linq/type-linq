@@ -2,10 +2,11 @@ import { Expression } from '../expression.js';
 import { EntityIdentifier } from '../identifier.js';
 import { Boundary } from './field.js';
 import { Source } from './source.js';
+import { SubSource } from './sub.js';
 import { WhereClause } from './where.js';
 
 export class JoinExpression extends Source {
-    readonly joined: EntityIdentifier | Boundary<EntityIdentifier>;
+    readonly joined: EntityIdentifier | Boundary<EntityIdentifier> | SubSource;
     readonly condition: WhereClause;
 
     get source() {
@@ -16,7 +17,11 @@ export class JoinExpression extends Source {
         return this.source.fieldSet;
     }
 
-    constructor(source: Source, joined: EntityIdentifier | Boundary<EntityIdentifier>, condition: WhereClause) {
+    constructor(
+        source: Source,
+        joined: EntityIdentifier | Boundary<EntityIdentifier> | SubSource,
+        condition: WhereClause,
+    ) {
         super(source);
         this.joined = joined;
         this.condition = condition;

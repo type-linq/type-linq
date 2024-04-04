@@ -30,16 +30,18 @@ import { accessor as dateAccessor, identifier as dateIdentifier } from './global
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;
-    #globalIdentifiers: unknown;
 
     #dbFile: string;
     #db?: sqlite3.Database;
     #schema: DatabaseSchema;
 
-    constructor(db: string, schema: DatabaseSchema, globals?: unknown) {
+    get schema() {
+        return this.#schema;
+    }
+
+    constructor(db: string, schema: DatabaseSchema) {
         super();
 
-        this.#globalIdentifiers = globals;
         this.globals = {
             mapAccessor: this.#mapAccessor,
             mapIdentifier: this.#mapIdentifier,

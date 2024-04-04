@@ -19,12 +19,13 @@ import {
 import { parseFunction } from './parse.js';
 import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
+import { SchemaType, StandardType } from '../schema-type.js';
 
 export const SCALAR_NAME = `__scalar__11cbd49f`;
 
 export function select<TElement, TMapped>(
     source: Queryable<TElement>,
-    map: Map<TElement, TMapped>,
+    map: Map<SchemaType<TElement>, TMapped>,
     args?: Serializable,
 ) {
     const ast = parseFunction(map, 1, args);
@@ -59,7 +60,7 @@ export function select<TElement, TMapped>(
         return result;
     });
 
-    return new Queryable<TMapped>(
+    return new Queryable<StandardType<TMapped>>(
         source.provider,
         result,
     );

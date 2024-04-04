@@ -2,11 +2,14 @@ export type Type = StringType | NumberType | BooleanType | NullType | DateType |
 
 export const UNION_TYPES = Symbol(`union-types`);
 
+export const TYPE_IDENTIFIER = Symbol(`string-type`);
+
 export class UnknownType {
     readonly [name: string]: Type | undefined;
 }
 
 export class StringType {
+    readonly [TYPE_IDENTIFIER]: `string` = `string`;
     readonly [name: string]: Type | undefined;
 
     get length() { return new NumberType(); }
@@ -20,6 +23,7 @@ export class StringType {
 }
 
 export class NumberType {
+    readonly [TYPE_IDENTIFIER]: `number` = `number`;
     readonly [name: string]: Type | undefined;
 
     get toString() { return new FunctionType(new StringType()) }
@@ -29,24 +33,29 @@ export class NumberType {
 }
 
 export class BooleanType {
+    readonly [TYPE_IDENTIFIER]: `boolean` = `boolean`;
     readonly [name: string]: Type | undefined;
     get toString() { return new FunctionType(new StringType()) }
 }
 
 export class DateType {
+    readonly [TYPE_IDENTIFIER]: `date` = `date`;
     readonly [name: string]: Type | undefined;
     get toString() { return new FunctionType(new StringType()) }
 }
 
 export class BinaryType {
+    readonly [TYPE_IDENTIFIER]: `binary` = `binary`;
     readonly [name: string]: Type | undefined;
 }
 
 export class NullType {
+    readonly [TYPE_IDENTIFIER]: `null` = `null`;
     readonly [name: string]: Type | undefined;
 }
 
 export class FunctionType {
+    readonly [TYPE_IDENTIFIER]: `function` = `function`;
     readonly [name: string]: Type | undefined;
     returnType: Type;
 
@@ -60,6 +69,7 @@ export type TypeFields = {
 }
 
 export class EntityType {
+    readonly [TYPE_IDENTIFIER]: `entity` = `entity`;
     readonly [name: string]: Type | undefined;
 
     constructor(fields: TypeFields) {
@@ -83,8 +93,9 @@ export class EntityType {
 }
 
 export class UnionTypeProxy {
+    readonly [TYPE_IDENTIFIER]: `union` = `union`;
     constructor(...types: Type[]) {
-        return new Proxy({}, {
+        return new Proxy(this, {
             ownKeys() {
                 return unionTypeKeys(types);
             },

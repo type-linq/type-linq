@@ -342,6 +342,10 @@ export function convert(
 
                 // Scalars
                 if (src instanceof FieldIdentifier) {
+                    if (src.source instanceof LinkedEntitySource) {
+                        throw new Error(`Unexpected LinkedEntitySource`);
+                    }
+
                     return new FieldIdentifier(
                         new LinkedEntitySource(
                             source.linked,

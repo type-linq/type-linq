@@ -234,8 +234,18 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             };
         }
         case  expression instanceof SubSource: {
-            // TODO
-            throw new Error(`not implemented`);
+            const { sql: entitySql, variables: entityVariables } = compileExpression(expression.entity, info);
+            if (info.aliasSource) {
+                const { sql: sourceSql, variables: sourceVariables } = compile(expression.source);
+                return {
+                    sql: `(\n\t${sourceSql}\n) AS ${entitySql}`,
+                    variables: [...sourceVariables, ...entityVariables],
+                };
+            }
+            return {
+                sql: entitySql,
+                variables: entityVariables,
+            };
         }
         case expression instanceof VariableExpression: {
             let value: Serializable;

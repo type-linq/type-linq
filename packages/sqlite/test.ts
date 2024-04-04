@@ -98,7 +98,7 @@ const schema: DatabaseSchema = {
     },
 } as const;
 
-const provider = new SqliteProvider(DB, schema, new Map());
+const provider = new SqliteProvider(DB, schema);
 
 /*
 type Schema = typeof schema;
@@ -244,12 +244,12 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     // TODO: Sort out ??
 
     // TODO: Dodgy SQL
-    const query6 = products
-        .select((c) => ({
-            name: c.ProductName,
-            stock: c.UnitsInStock!.toExponential(),
-            time: Date.now(),
-        }));
+    // const query6 = products
+    //     .select((c) => ({
+    //         name: c.ProductName,
+    //         stock: c.UnitsInStock!.toExponential(),
+    //         time: Date.now(),
+    //     }));
 
     // const query7 = products
     //     .select((c) => ({
@@ -257,7 +257,22 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     //         stock: Math.max(c.UnitsInStock!, 10),
     //     }))
 
-    for await (const product of query6) {
+    const query7 = products
+        .join(
+            suppliers
+                .where((c) => c.CompanyName > `B`),
+                // TODO: Try without select expression....
+                // .select((c) => c),
+            (c) => c.SupplierID,
+            (c) => c.SupplierID,
+            (o, i) => ({
+                id: o.ProductID,
+                name: o.ProductName,
+                supplier: i.CompanyName,
+            })
+        )
+
+    for await (const product of query7) {
         console.dir(product);
     }
 

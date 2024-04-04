@@ -7,7 +7,7 @@ export class Field extends Expression {
     readonly name: Identifier;
     readonly #source: Expression | (() => Expression);
 
-    get source() {
+    get source(): Expression {
         if (typeof this.#source === `function`) {
             return this.#source();
         } else {

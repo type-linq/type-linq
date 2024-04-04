@@ -1,11 +1,13 @@
 import { Expression } from '../expression.js';
+import { EntityIdentifier, EntityType } from '../index.js';
 import { randString } from '../util.js';
 import { Source } from './source.js';
 
 // TODO: Will we actually use this?
 
 export class SubSource extends Source {
-    identifier: string;
+    readonly entity: EntityIdentifier;
+    readonly identifier: string;
 
     /** Gets the underlying source */
     get source() {
@@ -29,6 +31,10 @@ export class SubSource extends Source {
     constructor(source: Source, identifier = randString()) {
         super(source);
         this.identifier = identifier;
+        this.entity = new EntityIdentifier(
+            identifier,
+            source.type as EntityType,
+        );
     }
 
     isEqual(expression?: Expression | undefined): boolean {
@@ -44,6 +50,7 @@ export class SubSource extends Source {
     }
 
     rebuild(source: Source | undefined): Expression {
+        console.log(`Rebuild`);
         return new SubSource(source ?? this.source, this.identifier);
     }
 

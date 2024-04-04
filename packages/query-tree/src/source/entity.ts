@@ -1,7 +1,8 @@
 import { Expression } from '../expression.js';
-import { EntityIdentifier } from '../identifier.js';
+import { EntityIdentifier, FieldSource } from '../identifier.js';
 import { FieldSet } from './field.js';
 import { Source } from './source.js';
+import { SubSource } from './sub.js';
 import { WhereClause } from './where.js';
 
 export class EntitySource extends Source {
@@ -55,9 +56,11 @@ export class EntitySource extends Source {
     }
 }
 
+export type LinkedSource = EntitySource | SubSource;
+
 export class LinkedEntitySource extends Source {
-    #source: EntitySource | (() => EntitySource);
-    #linked: EntitySource | LinkedEntitySource | (() => EntitySource | LinkedEntitySource);
+    #source: LinkedSource | (() => LinkedSource);
+    #linked: FieldSource | (() => FieldSource);
     clause: WhereClause;
 
     get source() {
@@ -91,8 +94,8 @@ export class LinkedEntitySource extends Source {
     }
 
     constructor(
-        linked: EntitySource | LinkedEntitySource | (() => EntitySource | LinkedEntitySource),
-        source: EntitySource | (() => EntitySource),
+        linked: FieldSource | (() => FieldSource),
+        source: LinkedSource | (() => LinkedSource),
         clause: WhereClause,
     ) {
         super();
@@ -116,8 +119,8 @@ export class LinkedEntitySource extends Source {
     }
 
     protected rebuild(
-        linked: EntitySource | undefined,
-        source: EntitySource | undefined,
+        linked: FieldSource | undefined,
+        source: LinkedSource | undefined,
         clause: WhereClause | undefined
     ): Expression {
         return new LinkedEntitySource(

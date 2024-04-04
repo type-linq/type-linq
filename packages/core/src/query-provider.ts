@@ -68,7 +68,7 @@ export abstract class QueryProvider {
             }
 
             function processLinked(provider: QueryProvider, linked: LinkedEntitySource) {
-                if (linked.linked instanceof EntitySource === false) {
+                if (linked.linked instanceof LinkedEntitySource) {
                     processLinked(provider, linked.linked);
                 }
 

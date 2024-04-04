@@ -10,10 +10,11 @@ import { Predicate, Serializable } from '../type.js';
 import { parseFunction } from './parse.js';
 import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
+import { SchemaType } from '../schema-type.js';
 
 export function where<TElement, TArgs extends Serializable | undefined = undefined>(
     source: Queryable<TElement>,
-    predicate: Predicate<TElement, TArgs>,
+    predicate: Predicate<SchemaType<TElement>, TArgs>,
     args?: TArgs,
 ) {
     const ast = parseFunction(predicate, 1, args);

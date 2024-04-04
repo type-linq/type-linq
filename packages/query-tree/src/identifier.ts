@@ -1,5 +1,5 @@
 import { Expression } from './expression.js';
-import { EntitySource, LinkedEntitySource } from './index.js';
+import { EntitySource, LinkedEntitySource, SubSource } from './index.js';
 import { EntityType, Type, UnknownType, isEqual } from './type.js';
 
 export class Identifier extends Expression {
@@ -70,8 +70,10 @@ export class EntityIdentifier extends Identifier {
     *walk() { }
 }
 
+export type FieldSource = EntitySource | LinkedEntitySource | SubSource;
+
 export class FieldIdentifier extends Identifier {
-    readonly #entity: EntitySource | LinkedEntitySource | (() => EntitySource | LinkedEntitySource);
+    readonly #entity: FieldSource | (() => FieldSource);
     readonly #type: Type | (() => Type | undefined);
 
     get entity() {
@@ -86,12 +88,11 @@ export class FieldIdentifier extends Identifier {
         }
     }
 
-    get source() {
-        if (this.entity instanceof EntitySource) {
-            return this.entity;
-        } else {
+    get source(): FieldSource {
+        if (this.entity instanceof LinkedEntitySource) {
             return this.entity.source;
         }
+        return this.entity;
     }
 
     get type() {
@@ -106,13 +107,17 @@ export class FieldIdentifier extends Identifier {
         }
     }
     
-    constructor(entity: EntitySource | LinkedEntitySource | (() => EntitySource | LinkedEntitySource), name: string, type: Type | (() => Type | undefined)) {
+    constructor(
+        entity: FieldSource | (() => FieldSource),
+        name: string,
+        type: Type | (() => Type | undefined)
+    ) {
         super(name);
         this.#entity = entity;
         this.#type = type;
     }
 
-    protected rebuild(entity: EntitySource | LinkedEntitySource): Identifier {
+    protected rebuild(entity: FieldSource): Identifier {
         return new FieldIdentifier(entity, this.name, this.type);
     }
 
