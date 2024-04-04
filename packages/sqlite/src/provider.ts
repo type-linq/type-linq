@@ -27,6 +27,8 @@ import { identifier as mathIdentifier } from './global/math.js';
 import { identifier as numberIdentifier, accessor as numberAccessor } from './global/number.js';
 import { accessor as booleanAccessor } from './global/boolean.js';
 import { accessor as dateAccessor, identifier as dateIdentifier } from './global/date.js';
+import { log } from './log.js';
+import { postProcess } from './post-process.js';
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;
@@ -56,14 +58,20 @@ export class SqliteProvider extends QueryProvider {
         const expression = this.finalize(source.expression, true);
         const { sql, variables } = this.compile(expression);
 
-        console.debug(`Executing SQL`);
-        console.debug(sql);
-        console.debug(variables);
-        console.debug(`=======================================`);
+        log.debug(`Executing SQL`);
+        log.debug(sql);
+        log.debug(variables);
+        log.debug(`=======================================`);
 
         const results = await this.run<TResult>(sql, variables);
+        log.debug(`Got ""${results.length}" results`);
+        log.debug(`=======================================`);
+
+        const convert = postProcess(expression);
+
         for (const result of results) {
-            yield result;
+            const converted = convert(result);
+            yield converted as TResult;
         }
     }
 
