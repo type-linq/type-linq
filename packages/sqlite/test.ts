@@ -257,22 +257,28 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     //         stock: Math.max(c.UnitsInStock!, 10),
     //     }))
 
-    const query7 = products
-        .join(
-            suppliers
-                .where((c) => c.CompanyName > `B`),
-                // TODO: Try without select expression....
-                // .select((c) => c),
-            (c) => c.SupplierID,
-            (c) => c.SupplierID,
-            (o, i) => ({
-                id: o.ProductID,
-                name: o.ProductName,
-                supplier: i.CompanyName,
-            })
-        )
+    // const query7 = products
+    //     .join(
+    //         suppliers
+    //             .where((c) => c.CompanyName > `B`),
+    //             // TODO: Try without select expression....
+    //             // .select((c) => c),
+    //         (c) => c.SupplierID,
+    //         (c) => c.SupplierID,
+    //         (o, i) => ({
+    //             id: o.ProductID,
+    //             name: o.ProductName,
+    //             supplier: i.CompanyName,
+    //         })
+    //     )
 
-    for await (const product of query7) {
+    const query8 = products
+        .select((c) => ({
+            productId: c.ProductID,
+            supplier: c.Supplier,
+        }))
+
+    for await (const product of query8) {
         console.dir(product);
     }
 

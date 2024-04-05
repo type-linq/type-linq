@@ -50,7 +50,6 @@ export class SubSource extends Source {
     }
 
     rebuild(source: Source | undefined): Expression {
-        console.log(`Rebuild`);
         return new SubSource(source ?? this.source, this.identifier);
     }
 

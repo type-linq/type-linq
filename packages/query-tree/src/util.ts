@@ -1,4 +1,5 @@
-import { Source, EntitySource, SelectExpression } from './source/index.js';
+import { EntityIdentifier } from './index.js';
+import { Source, EntitySource, SelectExpression, Boundary } from './source/index.js';
 import { Walker } from './walk.js';
 
 export function randString(length?: number) {
@@ -12,12 +13,25 @@ export function randString(length?: number) {
 export function boundary<TSource extends Source>(source: TSource, boundaryId = randString()): TSource {
     return Walker.mapSource(source, (exp) => {
         if (exp instanceof SelectExpression) {
-            return new SelectExpression(exp.entity, exp.fieldSet.boundary(boundaryId));
+            if (exp.entity instanceof Boundary) {
+                // TODO: What would this mean?
+                throw new Error(`Received an Unexpected Boundary`);
+            }
+
+            return new SelectExpression(
+                new Boundary<EntityIdentifier>(exp.entity, boundaryId),
+                exp.fieldSet.boundary(boundaryId)
+            );
         }
 
         if (exp instanceof EntitySource) {
+            if (exp.entity instanceof Boundary) {
+                // TODO: What would this mean?
+                throw new Error(`Received an Unexpected Boundary`);
+            }
+
             return new EntitySource(
-                exp.entity,
+                new Boundary<EntityIdentifier>(exp.entity, boundaryId),
                 exp.fieldSet.boundary(boundaryId),
             );
         }

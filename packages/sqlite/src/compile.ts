@@ -43,6 +43,7 @@ import {
     UnknownType,
     UnionType,
 } from '@type-linq/query-tree';
+import { formatter } from './formatter.js';
 
 export type SqlFragment = {
     sql: string;
@@ -55,6 +56,7 @@ type CompileInfo = {
     count: Record<string, number>;
     aliasSource?: boolean;
     aliasField?: boolean;
+    fmt: (strings: TemplateStringsArray, ...inserts: string[]) => string;
 
     // TODO: Something to know to process logical with ands and ors
     //  or with binary operators?
@@ -113,6 +115,7 @@ export function compile(expression: Source): SqlFragment {
         alias: {},
         boundary: [],
         count: {},
+        fmt: formatter,
     };
 
     const fields = compileExpression(select.fieldSet, {
@@ -126,9 +129,8 @@ export function compile(expression: Source): SqlFragment {
         undefined;
     
     const parts: string[] = [
-        `SELECT`,
-        fields.sql,
-        `FROM ${from.sql}`,
+        info.fmt`SELECT\n\t${fields.sql}`,
+        info.fmt`FROM ${from.sql}`,
         ...joins.map((jn) => jn.sql),
     ];
 
@@ -238,7 +240,7 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             if (info.aliasSource) {
                 const { sql: sourceSql, variables: sourceVariables } = compile(expression.source);
                 return {
-                    sql: `(\n\t${sourceSql}\n) AS ${entitySql}`,
+                    sql: info.fmt`(\n\t${sourceSql}\n) AS ${entitySql}`,
                     variables: [...sourceVariables, ...entityVariables],
                 };
             }
@@ -327,7 +329,7 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
         case expression instanceof FieldSet: {
             const fields = expression.fields.map((field) => compileExpression(field, info));
             return {
-                sql: `\t${fields.map((fld) => fld.sql).join(`,\n\t`)}`,
+                sql: fields.map((fld) => fld.sql).join(`,\n`),
                 variables: fields.map((fld) => fld.variables).flat(),
             };
 
@@ -352,7 +354,7 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
         case expression instanceof CaseBlocks: {
             const blocks = expression.when.map((when) => compileExpression(when, info));
             return {
-                sql: blocks.map((block) => `\t${block.sql}`).join(`\n`),
+                sql: blocks.map((block) => `${block.sql}`).join(`\n`),
                 variables: blocks.map((block) => block.variables).flat(),
             };
         }
@@ -360,7 +362,7 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             const blocks = compileExpression(expression.when, info);
             const alternate = compileExpression(expression.alternate, info);
             return {
-                sql: `CASE\n${blocks.sql}\n\tELSE ${alternate.sql}\nEND`,
+                sql: info.fmt`CASE\n\t${blocks.sql}\n\tELSE ${alternate.sql}\nEND`,
                 variables: [...blocks.variables, ...alternate.variables],
             };
         }

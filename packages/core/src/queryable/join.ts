@@ -8,7 +8,6 @@ import {
     JoinExpression,
     Source,
     EntitySource,
-    Boundary,
     WhereClause,
     SubSource,
     FieldIdentifier,
@@ -129,7 +128,7 @@ export function join<TOuter, TInner, TKey, TResult>(
 
         const joinExpression = new JoinExpression(
             outerExpression,
-            new Boundary(innerSource.entity, boundaryId),
+            innerSource.entity,
             condition,
         );
         return { join: joinExpression, source: bounded };

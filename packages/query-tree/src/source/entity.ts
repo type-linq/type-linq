@@ -1,6 +1,6 @@
 import { Expression } from '../expression.js';
 import { EntityIdentifier, FieldSource } from '../identifier.js';
-import { FieldSet } from './field.js';
+import { Boundary, FieldSet } from './field.js';
 import { Source } from './source.js';
 import { SubSource } from './sub.js';
 import { WhereClause } from './where.js';
@@ -9,14 +9,14 @@ export class EntitySource extends Source {
 
     // TODO: We actually need the FieldSet type here not to be dynamic......
 
-    readonly entity: EntityIdentifier;
+    readonly entity: EntityIdentifier | Boundary<EntityIdentifier>;
     readonly fieldSet: FieldSet;
 
     get source() {
         return undefined;
     }
 
-    constructor(entity: EntityIdentifier, fieldSet: FieldSet) {
+    constructor(entity: EntityIdentifier | Boundary<EntityIdentifier>, fieldSet: FieldSet) {
         super();
 
         this.entity = entity;
@@ -43,7 +43,7 @@ export class EntitySource extends Source {
         return true;
     }
 
-    rebuild(entity: EntityIdentifier | undefined, fieldSet: FieldSet | undefined): EntitySource {
+    rebuild(entity: EntityIdentifier | Boundary<EntityIdentifier> | undefined, fieldSet: FieldSet | undefined): EntitySource {
         return new EntitySource(
             entity ?? this.entity,
             fieldSet ?? this.fieldSet,

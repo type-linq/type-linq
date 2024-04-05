@@ -1,9 +1,37 @@
-// join: <TInner, TKey, TResult>(
-    //     inner: Enumerable<TInner>,
-    //     outerExpression: Map<TElement, TKey>,
-    //     innerExpression: Map<TInner, TKey>,
-    //     map: Merge<TElement, TInner, TResult>,
-    // ) => TResult,
+    // Implemented
+    // select
+    // join
+    // where
+
+
+    // distinct
+    // distinctBy
+    // first
+    // firstOrDefault
+    // last
+    // lastOrDefault
+    // single
+    // singleOrDefault
+    // count
+    // defaultIfEmpty
+    // elementAt
+    // elementAtOrDefault
+    // groupBy
+    // groupJoin
+    // order
+    // orderBy
+    // orderByDescending
+    // thenBy
+    // thenByDescending
+    // prepend
+    // revserse
+    // max
+    // maxBy
+    // min
+    // minBy
+    // sum
+    // skip
+    // take
 
     // aggregate
     // all
@@ -13,47 +41,17 @@
     // chunk
     // concat
     // contains
-    // count
-    // defaultIfEmpty
-    // distinct
-    // distinctBy
-    // elementAt
-    // elementAtOrDefault
     // except
     // exceptBy
-    // first
-    // firstOrDefault
-    // groupBy
-    // groupJoin
     // intersect
     // intersectBy
-    // join
-    // last
-    // lastOrDefault
-    // longCount
-    // max
-    // maxBy
-    // min
-    // minBy
-    // order
-    // orderBy
-    // orderByDescending
-    // prepend
-    // revserse
-    // select
+    // longCount    
     // selectMany
     // sequenceEqual
-    // single
-    // singleOrDefault
-    // skip
     // skipLast
     // skipWhile
-    // sum
-    // take
     // takeLast
     // takeWhile
-    // thenBy
-    // thenByDescending
     // union
     // unionBy
 

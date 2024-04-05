@@ -18,6 +18,7 @@ import {
 } from '@type-linq/query-tree';
 
 import { DatabaseSchema } from './schema.js';
+import { randString } from './util.js';
 
 export function buildSources(schema: DatabaseSchema) {
     const entityTypes: Record<string, EntityType> = {};
@@ -66,11 +67,20 @@ export function buildSources(schema: DatabaseSchema) {
         }
 
         for (const [linkName, { table: tableName, columns }] of Object.entries(table.links)) {
+            const boundaryId = randString();
             const clause = Object.entries(columns).reduce<WhereClause | undefined>((result, [sourceName, joinedName]) => {
                 const comparison = new BinaryExpression(
-                    new FieldIdentifier(() => sources[table.name], sourceName, () => sources[table.name].type[sourceName] as Type),
+                    new FieldIdentifier(
+                        () => sources[table.name],
+                        sourceName,
+                        () => sources[table.name].type[sourceName] as Type
+                    ),
                     `==`,
-                    new FieldIdentifier(() => sources[tableName], joinedName, () => sources[tableName].type[joinedName] as Type),
+                    new FieldIdentifier(
+                        () => sources[tableName].boundary(boundaryId),
+                        joinedName,
+                        () => sources[tableName].type[joinedName] as Type
+                    ),
                 );
 
                 if (result === undefined) {
@@ -82,7 +92,7 @@ export function buildSources(schema: DatabaseSchema) {
 
             const linkedSource = new LinkedEntitySource(
                 () => sources[table.name],
-                () => sources[tableName].boundary(),
+                () => sources[tableName].boundary(boundaryId),
                 clause || new BinaryExpression(
                     new Literal(1),
                     `==`,

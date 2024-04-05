@@ -1,13 +1,13 @@
 import { Expression } from '../expression.js';
 import { EntityIdentifier } from '../identifier.js';
-import { FieldSet } from './field.js';
+import { Boundary, FieldSet } from './field.js';
 import { Source } from './source.js';
 
 export class SelectExpression extends Source {
     fieldSet: FieldSet;
-    entity: EntityIdentifier;
+    entity: EntityIdentifier | Boundary<EntityIdentifier>;
 
-    constructor(entity: EntityIdentifier, fieldSet: FieldSet) {
+    constructor(entity: EntityIdentifier | Boundary<EntityIdentifier>, fieldSet: FieldSet) {
         super();
         this.entity = entity;
         this.fieldSet = fieldSet;
@@ -29,7 +29,7 @@ export class SelectExpression extends Source {
         return true;
     }
 
-    rebuild(entity: EntityIdentifier | undefined, fieldSet: FieldSet | undefined): SelectExpression {
+    rebuild(entity: EntityIdentifier | Boundary<EntityIdentifier> | undefined, fieldSet: FieldSet | undefined): SelectExpression {
         return new SelectExpression(
             entity ?? this.entity,
             fieldSet ?? this.fieldSet,

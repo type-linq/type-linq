@@ -10,7 +10,9 @@ import {
     Source,
     SubSource,
     Walker,
-    WhereExpression
+    WhereExpression,
+    EntityIdentifier,
+    Field,
 } from '@type-linq/query-tree';
 import { Globals } from './convert/global.js';
 import { Queryable } from './queryable/queryable.js';
@@ -20,8 +22,6 @@ export abstract class QueryProvider {
     abstract globals: Globals;
 
     finalize(source: Source, forceScalars = false): Source {
-        // TODO: Add bounding when we join linked sources
-
         const whereClauses: WhereClause[] = [];
 
         const expression = Walker.mapSource(source, (exp) => {
@@ -29,11 +29,13 @@ export abstract class QueryProvider {
                 return exp;
             }
 
+            // TODO: Note: When we have group by we will need to collect separately
+            //  on each side of the group by clause (So things like HAVING can be generated)
             if (exp instanceof WhereExpression) {
                 whereClauses.push(exp.clause);
             }
 
-            const { linkedSources, expression } = extractLinkedSources(exp);
+            const { linkedSources, expression } = extractLinkedSources(this, exp);
 
             if (linkedSources.length === 0) {
                 if (exp instanceof WhereExpression) {
@@ -99,8 +101,6 @@ export abstract class QueryProvider {
             return exp;
         });
 
-        // TODO: forceScalars!
-
         const whereClause = whereClauses.reduce<WhereClause | undefined>(
             (result, clause) => {
                 if (result === undefined) {
@@ -112,33 +112,92 @@ export abstract class QueryProvider {
             undefined,
         );
 
-        if (whereClause) {
-            return new WhereExpression(deduped, whereClause);
-        } else {
-            return deduped;
+        const result = whereClause ?
+            new WhereExpression(deduped, whereClause) :
+            deduped;
+
+        if (forceScalars === false) {
+            return result;
         }
+
+        // There are 2 distinct cases we need to handle...
+        //  1. We have selected an entity source directly, in which case we should generate a select
+        //     expression using only it's scalars....
+        //  2. We have an EntityType in one of the columns, in which case we must get all scalar fields
+        //     and merge them into the existing fields (with "<Name>"."<Scalar Name>")
+
+        const withSelect = Walker.mapSource(result, (exp) => {
+            if (exp instanceof EntitySource === false) {
+                return exp;
+            }
+
+            // We always want a select at the base
+            const result = new SelectExpression(
+                exp.entity,
+                source.fieldSet.scalars(),
+            );
+            return result;
+        });
+
+        const fields = withSelect.fieldSet.fields.map(
+            (entityField) => entityField.source instanceof Source ?
+                entityField.source.fieldSet.scalars().fields.map(
+                    (field) => new Field(
+                        field.source,
+                        `${entityField.name.name}.${field.name.name}`,
+                    )
+                ) :
+                entityField
+        ).flat();
+
+        // TODO: This doesn't work because the fields aren't bounded?
+        //  why isn't the Supplier field bounded?
+
+        // Now swap out the base of the branch
+        const finalResult = Walker.mapSource(withSelect, (exp) => {
+            if (exp instanceof SelectExpression === false) {
+                return exp;
+            }
+
+            // We always want a select at the base
+            const result = new SelectExpression(
+                exp.entity,
+                exp.fieldSet.scalar && fields.length === 1 ?
+                    new FieldSet(fields[0]) :
+                    new FieldSet(fields),
+            );
+            return result;
+        });
+
+        return finalResult;
     }
 }
 
-function extractLinkedSources(exp: Source) {
+function extractLinkedSources(provider: QueryProvider, exp: Source) {
     let searchExpression: Expression;
+    let linked: Expression;
     switch (true) {
         case exp instanceof JoinExpression:
             searchExpression = exp.condition;
-            // TODO: We still need to process the condition!
-            // TODO: What if the condition has linked sources that belong to the sub source?
+            linked = exp.source;
             if (exp.source instanceof SubSource) {
-                throw new Error(`Not yet supported`);
+                linked = new SubSource(
+                    provider.finalize(exp.source.source, false),
+                    exp.source.identifier,
+                );
             }
             break;
         case exp instanceof WhereExpression:
             searchExpression = exp.clause;
+            linked = exp.source;
             break;
         case exp instanceof EntitySource:
             searchExpression = exp.fieldSet.scalars();
+            linked = exp.entity;
             break;
         case exp instanceof SelectExpression:
             searchExpression = exp.fieldSet;
+            linked = exp.entity;
             break;
         default:
             throw new Error(`Unexpected expression type "${exp.constructor.name}" received`);
@@ -171,21 +230,21 @@ function extractLinkedSources(exp: Source) {
     switch (true) {
         case exp instanceof JoinExpression:
             result = new JoinExpression(
-                exp.source,
+                linked as Source,
                 exp.joined,
                 cleaned as WhereClause,
             );
             break;
         case exp instanceof WhereExpression:
             result = new WhereExpression(
-                exp.source,
+                linked as Source,
                 cleaned as WhereClause,
             );
             break;
         case exp instanceof EntitySource:
         case exp instanceof SelectExpression:
             result = new SelectExpression(
-                exp.entity,
+                linked as EntityIdentifier,
                 cleaned as FieldSet,
             );
             break;
