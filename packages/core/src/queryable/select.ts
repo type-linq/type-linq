@@ -21,7 +21,8 @@ import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
 import { SchemaType, StandardType } from '../schema-type.js';
 
-export const SCALAR_NAME = `__scalar__11cbd49f`;
+// TODO: Move this to a constants file
+export const SCALAR_NAME = `value`;
 
 export function select<TElement, TMapped>(
     source: Queryable<TElement>,

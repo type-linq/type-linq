@@ -275,8 +275,11 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     const query8 = products
         .select((c) => ({
             productId: c.ProductID,
+            name: c.ProductName,
             supplier: c.Supplier,
         }))
+        .orderBy((c) => c.name)
+        .thenBy((c) => c.supplier.CompanyName);
 
     for await (const product of query8) {
         console.dir(product);

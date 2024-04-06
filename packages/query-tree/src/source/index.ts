@@ -5,3 +5,4 @@ export * from './sub.js';
 export * from './select.js';
 export * from './where.js';
 export * from './join.js';
+export * from './order.js';

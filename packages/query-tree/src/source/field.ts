@@ -30,6 +30,8 @@ export class Field extends Expression {
         // We need to somehow ignore entity sources....
         // (And perhaps just walk yield entity identifier?)
 
+        // TODO: Why are we walking source from a FieldIdentifier!?
+        // TODO: Get new branch to changce this and remove all ciircular walk code from the Walker
         yield this.source;
     }
 

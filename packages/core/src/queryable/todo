@@ -3,40 +3,50 @@
     // join
     // where
 
+    // orderBy
+    // orderByDescending
+    // thenBy
+    // thenByDescending
+    
+    // groupBy
 
     // distinct
     // distinctBy
+
+    // count
+    // max
+    // maxBy
+    // min
+    // minBy
+    // sum
+
+    // skip
+    // take
+
     // first
     // firstOrDefault
     // last
     // lastOrDefault
     // single
     // singleOrDefault
-    // count
     // defaultIfEmpty
+
     // elementAt
     // elementAtOrDefault
-    // groupBy
-    // groupJoin
-    // order
-    // orderBy
-    // orderByDescending
-    // thenBy
-    // thenByDescending
-    // prepend
-    // revserse
-    // max
-    // maxBy
-    // min
-    // minBy
-    // sum
-    // skip
-    // take
 
+    // append
+    // prepend
+
+    // revserse
+    
+    // groupJoin
+
+    // TODO: Decide which of these we should do?
+
+    // order
     // aggregate
     // all
     // any
-    // append
     // average
     // chunk
     // concat

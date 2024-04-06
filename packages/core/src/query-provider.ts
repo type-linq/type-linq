@@ -13,6 +13,7 @@ import {
     WhereExpression,
     EntityIdentifier,
     Field,
+    OrderExpression,
 } from '@type-linq/query-tree';
 import { Globals } from './convert/global.js';
 import { Queryable } from './queryable/queryable.js';
@@ -71,7 +72,7 @@ export abstract class QueryProvider {
 
             function processLinked(provider: QueryProvider, linked: LinkedEntitySource) {
                 if (linked.linked instanceof LinkedEntitySource) {
-                    processLinked(provider, linked.linked);
+                    return processLinked(provider, linked.linked);
                 }
 
                 return new JoinExpression(
@@ -173,10 +174,17 @@ export abstract class QueryProvider {
     }
 }
 
-function extractLinkedSources(provider: QueryProvider, exp: Source) {
+export function extractLinkedSources<TResult extends Source | Field>(
+    provider: QueryProvider,
+    exp: TResult
+): { expression: TResult, linkedSources: LinkedEntitySource[] } {
     let searchExpression: Expression;
     let linked: Expression;
     switch (true) {
+        case exp instanceof Field:
+            searchExpression = exp.source;
+            linked = exp;
+            break;
         case exp instanceof JoinExpression:
             searchExpression = exp.condition;
             linked = exp.source;
@@ -189,6 +197,10 @@ function extractLinkedSources(provider: QueryProvider, exp: Source) {
             break;
         case exp instanceof WhereExpression:
             searchExpression = exp.clause;
+            linked = exp.source;
+            break;
+        case exp instanceof OrderExpression:
+            searchExpression = exp.expression;
             linked = exp.source;
             break;
         case exp instanceof EntitySource:
@@ -204,6 +216,9 @@ function extractLinkedSources(provider: QueryProvider, exp: Source) {
     }
 
     let linkedSources: LinkedEntitySource[] = [];
+
+    // TODO: Does not appear to be cleaning order items?
+
     const cleaned = Walker.map(
         searchExpression,
         (exp) => {
@@ -226,8 +241,14 @@ function extractLinkedSources(provider: QueryProvider, exp: Source) {
         ) === idx
     );
 
-    let result: Source;
+    let result: Source | Field;
     switch (true) {
+        case exp instanceof Field:
+            result = new Field(
+                cleaned,
+                exp.name.name,
+            );
+            break;
         case exp instanceof JoinExpression:
             result = new JoinExpression(
                 linked as Source,
@@ -241,6 +262,12 @@ function extractLinkedSources(provider: QueryProvider, exp: Source) {
                 cleaned as WhereClause,
             );
             break;
+        case exp instanceof OrderExpression:
+            result = new OrderExpression(
+                linked as Source,
+                cleaned,
+            );
+            break;
         case exp instanceof EntitySource:
         case exp instanceof SelectExpression:
             result = new SelectExpression(
@@ -249,11 +276,12 @@ function extractLinkedSources(provider: QueryProvider, exp: Source) {
             );
             break;
         default:
-            return exp;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            throw new Error(`Unexpected source type "${(exp as any).constructor.name}"`);
     }
 
     return {
-        expression: result,
+        expression: result as TResult,
         linkedSources,
     };
 }

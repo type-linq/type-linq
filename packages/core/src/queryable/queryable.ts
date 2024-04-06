@@ -5,6 +5,7 @@ import { where } from './where.js';
 import { join } from './join.js';
 import { Map, Merge, Predicate, Serializable } from '../type.js';
 import { SchemaType, StandardType } from '../schema-type.js';
+import { orderBy, orderByDescending, thenBy, thenByDescending } from './order.js';
 
 export class Queryable<TElement> {
     readonly provider: QueryProvider;
@@ -44,5 +45,69 @@ export class Queryable<TElement> {
         );
 
         return new Queryable<StandardType<TResult>>(this.provider, expression);
+    }
+
+    orderBy<TKey>(
+        key: Map<TElement, TKey>,
+        args?: Serializable,
+    ) {
+        const expression = orderBy(
+            this,
+            key,
+            args
+        );
+
+        return new Queryable<TElement>(
+            this.provider,
+            expression,
+        );        
+    }
+
+    orderByDescending<TKey>(
+        key: Map<TElement, TKey>,
+        args?: Serializable,
+    ) {
+        const expression = orderByDescending(
+            this,
+            key,
+            args
+        );
+
+        return new Queryable<TElement>(
+            this.provider,
+            expression,
+        );        
+    }
+
+    thenBy<TKey>(
+        key: Map<TElement, TKey>,
+        args?: Serializable,
+    ) {
+        const expression = thenBy(
+            this,
+            key,
+            args
+        );
+
+        return new Queryable<TElement>(
+            this.provider,
+            expression,
+        );        
+    }
+
+    thenByDescending<TKey>(
+        key: Map<TElement, TKey>,
+        args?: Serializable,
+    ) {
+        const expression = thenByDescending(
+            this,
+            key,
+            args
+        );
+
+        return new Queryable<TElement>(
+            this.provider,
+            expression,
+        );        
     }
 }
