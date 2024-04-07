@@ -14,6 +14,7 @@ import {
     EntityIdentifier,
     Field,
     OrderExpression,
+    Boundary,
 } from '@type-linq/query-tree';
 import { Globals } from './convert/global.js';
 import { Queryable } from './queryable/queryable.js';
@@ -23,6 +24,10 @@ export abstract class QueryProvider {
     abstract globals: Globals;
 
     finalize(source: Source, forceScalars = false): Source {
+
+        // TODO: Something is not right here...
+        //  We end up with LinkedEntitySources in the tree...
+
         const whereClauses: WhereClause[] = [];
 
         const expression = Walker.mapSource(source, (exp) => {

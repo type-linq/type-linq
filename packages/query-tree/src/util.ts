@@ -30,6 +30,7 @@ export function boundary<TSource extends Source>(source: TSource, boundaryId = r
                 throw new Error(`Received an Unexpected Boundary`);
             }
 
+            // TODO: Is this a good idea?
             return new EntitySource(
                 new Boundary<EntityIdentifier>(exp.entity, boundaryId),
                 exp.fieldSet.boundary(boundaryId),

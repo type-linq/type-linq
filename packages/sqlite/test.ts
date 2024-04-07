@@ -266,7 +266,7 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     //         (c) => c.SupplierID,
     //         (c) => c.SupplierID,
     //         (o, i) => ({
-    //             id: o.ProductID,
+    //             id: o.ProductID, 
     //             name: o.ProductName,
     //             supplier: i.CompanyName,
     //         })

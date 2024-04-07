@@ -336,9 +336,21 @@ export function convert(
                     throw new Error(`Unable to find identifier "${name}" on source`);
                 }
 
+                const boundaryId = field.source instanceof Boundary ?
+                    field.source.identifier :
+                    undefined;
+
                 const src = field.source instanceof Boundary ?
                     field.source.expression :
                     field.source;
+
+                const maybeBoundary = (expression: QueryExpression) => {
+                    if (boundaryId) {
+                        return new Boundary(expression, boundaryId);
+                    } else {
+                        return expression;
+                    }
+                }
 
                 // Scalars
                 if (src instanceof FieldIdentifier) {
@@ -346,31 +358,37 @@ export function convert(
                         throw new Error(`Unexpected LinkedEntitySource`);
                     }
 
-                    return new FieldIdentifier(
-                        new LinkedEntitySource(
-                            source.linked,
-                            src.source,
-                            source.clause,
-                        ),
-                        field.name.name,
-                        field.type,
+                    return maybeBoundary(
+                        new FieldIdentifier(
+                            new LinkedEntitySource(
+                                source.linked,
+                                src.source,
+                                source.clause,
+                            ),
+                            field.name.name,
+                            field.type,
+                        )
                     );
                 }
 
                 if (src instanceof EntitySource) {
-                    return new LinkedEntitySource(
-                        source,
-                        src,
-                        source.clause,
+                    return maybeBoundary(
+                        new LinkedEntitySource(
+                            source,
+                            src,
+                            source.clause,
+                        )
                     );
                 }
 
                 if (src instanceof LinkedEntitySource) {
                     // TODO: Test this
-                    return new LinkedEntitySource(
-                        source,
-                        src.source,
-                        src.clause,
+                    return maybeBoundary(
+                        new LinkedEntitySource(
+                            source,
+                            src.source,
+                            src.clause,
+                        )
                     );
                 }
 

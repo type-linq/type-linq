@@ -28,7 +28,7 @@ export class OrderExpression extends Source {
             return false;
         }
 
-        return this.source.isEqual(this.source) &&
+        return this.source.isEqual(expression.source) &&
             this.expression.isEqual(expression.expression) &&
             this.descending === expression.descending;
     }

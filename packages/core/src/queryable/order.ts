@@ -1,4 +1,5 @@
 import {
+    Boundary,
     Expression,
     Field,
     JoinExpression,
@@ -9,7 +10,7 @@ import {
 } from '@type-linq/query-tree';
 
 import { convert } from '../convert/convert.js';
-import { readName } from '../convert/util.js';
+import { randString, readName } from '../convert/util.js';
 import { Serializable, Map as ValueMap, Expression as AstExpression, ExpressionTypeKey } from '../type.js';
 import { Queryable } from './queryable.js';
 import { buildSources, varsName } from './util.js';
@@ -110,24 +111,16 @@ export function thenBy<TElement, TKey>(
         source.expression,
     );
 
-    // TODO: We should add the linked entity joins here surely?
-    //  Once we have an order by, we always need them....
-
-    // TODO: Test here, and implement everywhere else....
-    
-
-    
-
-    // TODO: Transform the select
-    // TODO: Add the joins
-
-
     let current = source.expression;
     for (const field of fields) {
         const { linkedSources, expression: cleanedField } = extractLinkedSources(source.provider, field);
 
-        for (const link of linkedSources) {
-            current = processLinked(link);
+        const boundaryId = field.source instanceof Boundary ?
+            field.source.identifier :
+            undefined;
+
+        for (const link of linkedSources) {    
+            current = processLinked(link, boundaryId);
         }
 
         current = new OrderExpression(
@@ -160,14 +153,20 @@ export function thenBy<TElement, TKey>(
 
     return deduped;
 
-    function processLinked(linked: LinkedEntitySource) {
+    function processLinked(linked: LinkedEntitySource, boundaryId?: string) {
         if (linked.linked instanceof LinkedEntitySource) {
-            return processLinked(linked.linked);
+            return processLinked(linked.linked, boundaryId);
+        }
+
+        if (linked.source.entity instanceof Boundary) {
+            throw new Error(`Unexpected Boundary`);
         }
 
         return new JoinExpression(
             current,
-            linked.source.entity,
+            boundaryId ?
+                new Boundary(linked.source.entity, boundaryId) :
+                linked.source.entity,
             linked.clause,
         );
     }

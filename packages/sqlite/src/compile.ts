@@ -187,14 +187,12 @@ export function compile(expression: Source): SqlFragment {
 function compileExpression(expression: Expression, info: CompileInfo): SqlFragment {
     switch (true) {
         case expression instanceof JoinExpression:
-        case expression instanceof SelectExpression:
         case expression instanceof WhereExpression: {
             if (expression.fieldSet.scalar) {
                 return compileExpression(expression.fieldSet.field.source, info);
             }
-            throw new Error(`Expected "${expression.constructor.name}". Expected expression to be handled externally`);
+            throw new Error(`Unexpected "${expression.constructor.name}". Expected expression to be handled externally`);
         }
-
         case expression instanceof EntitySource: {
             return compileExpression(expression.entity, info);
         }
