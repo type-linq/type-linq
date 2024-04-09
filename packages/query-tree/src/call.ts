@@ -26,7 +26,7 @@ export class CallArguments extends Expression {
         }
     }
 
-    protected rebuild(...args: Expression[]): Expression {
+    rebuild(...args: Expression[]): Expression {
         return new CallArguments(args);
     }
 }

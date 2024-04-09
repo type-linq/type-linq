@@ -2,56 +2,30 @@ import {
     BinaryType,
     NumberType,
     StringType,
-    EntityIdentifier,
-    EntityType,
     EntitySource,
-    TypeFields,
     Field,
     FieldSet,
     FieldIdentifier,
     LogicalExpression,
     BinaryExpression,
     Literal,
-    LinkedEntitySource,
     Type,
     WhereClause,
+    LinkedEntity,
+    Boundary,
+    Entity,
+    EntityIdentifier,
+    EntityType,
 } from '@type-linq/query-tree';
 
 import { DatabaseSchema } from './schema.js';
 import { randString } from './util.js';
 
 export function buildSources(schema: DatabaseSchema) {
-    const entityTypes: Record<string, EntityType> = {};
-    const entities: Record<string, EntityIdentifier> = {};
     const sources: Record<string, EntitySource> = {};
-
-    // TODO: We need select expressions onto fields...
-    //  Why? Why can't we handle jus an entity source...
-    
-    for (const table of Object.values(schema.tables)) {
-        const fields: TypeFields = {};
-
-        for (const [name, { type: dbType }] of Object.entries(table.columns)) {
-            fields[name] = createType(dbType);
-        }
-
-        for (const [linkName, { table: tbl }] of Object.entries(table.links)) {
-            fields[linkName] = () => entityTypes[tbl];
-        }
-
-        const type = new EntityType(fields);
-        entityTypes[table.name] = type;
-    }
-
 
     for (const [name, table] of Object.entries(schema.tables)) {
         const fields: Field[] = [];
-
-        const entity = new EntityIdentifier(
-            table.name,
-            entityTypes[table.name],
-        );
-        entities[table.name] = entity;
 
         for (const [name, column] of Object.entries(table.columns)) {
             fields.push(
@@ -68,20 +42,21 @@ export function buildSources(schema: DatabaseSchema) {
 
         for (const [linkName, { table: tableName, columns }] of Object.entries(table.links)) {
             const boundaryId = randString();
+
+            const source = () => sources[table.name];
+            const linked: () => LinkedEntity = () => new LinkedEntity(
+                () => sources[table.name],
+                () => new Boundary(sources[tableName], boundaryId),
+                () => clause!,
+            );
+
             const clause = Object.entries(columns).reduce<WhereClause | undefined>((result, [sourceName, joinedName]) => {
-                const comparison = new BinaryExpression(
-                    new FieldIdentifier(
-                        () => sources[table.name],
-                        sourceName,
-                        () => sources[table.name].type[sourceName] as Type
-                    ),
-                    `==`,
-                    new FieldIdentifier(
-                        () => sources[tableName].boundary(boundaryId),
-                        joinedName,
-                        () => sources[tableName].type[joinedName] as Type
-                    ),
-                );
+                const sourceType = () => sources[table.name].type[sourceName] as Type;
+                const linkedType = () => sources[tableName].type[sourceName] as Type;
+
+                const left = new FieldIdentifier(source, sourceName, sourceType);
+                const right = new FieldIdentifier(linked, joinedName, linkedType);
+                const comparison = new BinaryExpression(left, `==`, right);
 
                 if (result === undefined) {
                     return comparison;
@@ -90,14 +65,10 @@ export function buildSources(schema: DatabaseSchema) {
                 return new LogicalExpression(result, `&&`, comparison);
             }, undefined);
 
-            const linkedSource = new LinkedEntitySource(
-                () => sources[table.name],
-                () => sources[tableName].boundary(boundaryId),
-                clause || new BinaryExpression(
-                    new Literal(1),
-                    `==`,
-                    new Literal(1),
-                ),
+            const linkedSource = new LinkedEntity(
+                source,
+                () => new Boundary(sources[tableName], boundaryId),
+                clause || new BinaryExpression(new Literal(1), `==`, new Literal(1)),
             );
 
             fields.push(
@@ -108,9 +79,13 @@ export function buildSources(schema: DatabaseSchema) {
             );
         }
 
-        const source = new EntitySource(
-            entity,
-            new FieldSet(fields, () => entityTypes[table.name]),
+        const fieldSet = new FieldSet(fields);
+        const source = new Entity(
+            new EntityIdentifier(
+                table.name,
+                fieldSet.type as EntityType
+            ),
+            fieldSet,
         );
         sources[name] = source;
     }

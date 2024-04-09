@@ -13,10 +13,7 @@ import {
     UnaryExpression,
     VariableExpression,
     Field,
-    LinkedEntitySource,
-    EntitySource,
     FieldIdentifier,
-    Boundary,
     FunctionType,
     CallArguments,
 } from '@type-linq/query-tree';
@@ -180,7 +177,7 @@ export function convert(
         }
 
         if (isGlobalIdentifier(expression, globals)) {
-            const exp = mapGlobalIdentifier(expression, globals!, []);
+            const exp = mapGlobalIdentifier(expression, globals!);
             if (exp === undefined) {
                 throw new Error(`Unable to map global expression`);
             }
@@ -248,12 +245,15 @@ export function convert(
 
     function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression {
         if (isGlobalIdentifier(expression, globals)) {
-            const exp = mapGlobalIdentifier(expression, globals!, []);
+            const exp = mapGlobalIdentifier(expression, globals!);
             if (exp === undefined) {
                 throw new Error(`Unable to map global expression`);
             }
             return exp;
         }
+
+        // Not that we've sorted out the field identifiers and fields,
+        //  what changes do we need to make here?
 
         const source = process(expression.object);
         const name = readName(expression.property);
@@ -285,7 +285,18 @@ export function convert(
             case source instanceof LogicalExpression:
             case source instanceof TernaryExpression:
             case source instanceof UnaryExpression:
+                // TODO: We would need to return multiple values from this surely?
+                throw new Error(`not implemented`);
             case source instanceof Source: {
+                if (source.type instanceof EntityType === false) {
+                    const field = source.fieldSet.field;
+                    const exp = mapGlobalAccessor(field, name, [], globals);
+                    if (exp === undefined) {
+                        throw new Error(`Unable to map MemberExpression to global (Trying to map "${name}" to "${field.type.constructor.name}")`);
+                    }
+                    return exp;
+                }
+
                 const result = processAccess(source, name) as QueryExpression;
                 return result;
             }
@@ -310,90 +321,35 @@ export function convert(
     }
 
     function processAccess(source: QueryExpression, name: string) {
+        if (source.type instanceof EntityType === false) {
+            throw new Error(`processAccess must be called on an EntityType`);
+        }
+
         const type = source.type[name];
         if (type === undefined) {
             throw new Error(`Unable to find identifier "${name}" on source`);
         }
 
-        if (source.type instanceof EntityType === false) {
-            const src = source instanceof Source ?
-                source.fieldSet.field :
-                source;
-
-            // Either a scalar or a union. In both cases we will
-            //  be accessing a globally mapped accessor
-            const exp = mapGlobalAccessor(src, name, [], globals);
-            if (exp === undefined) {
-                throw new Error(`Unable to map MemberExpression to global (Trying to map "${name}" to "${src.type.constructor.name}")`);
-            }
-            return exp;
-        }
-
         switch (true) {
-            case source instanceof LinkedEntitySource: {
-                const field = source.fieldSet.find(name);
-                if (field === undefined) {
-                    throw new Error(`Unable to find identifier "${name}" on source`);
-                }
-
-                const src = field.source instanceof Boundary ?
-                    field.source.expression :
-                    field.source;
-
-                // Scalars
-                if (src instanceof FieldIdentifier) {
-                    if (src.source instanceof LinkedEntitySource) {
-                        throw new Error(`Unexpected LinkedEntitySource`);
-                    }
-
-                    return new FieldIdentifier(
-                        new LinkedEntitySource(
-                            source.linked,
-                            src.source,
-                            source.clause,
-                        ),
-                        field.name.name,
-                        field.type,
-                    );
-                }
-
-                if (src instanceof EntitySource) {
-                    return new LinkedEntitySource(
-                        source,
-                        src,
-                        source.clause,
-                    );
-                }
-
-                if (src instanceof LinkedEntitySource) {
-                    // TODO: Test this
-                    return new LinkedEntitySource(
-                        source,
-                        src.source,
-                        src.clause,
-                    );
-                }
-
-                throw new Error(`Unexpected field source type "${src.constructor.name}" received`);
-            }
+            case source instanceof Field:
+                return processAccess(source.expression, name);
             case source instanceof Source: {
                 const field = source.fieldSet.find(name);
                 if (field === undefined) {
                     throw new Error(`Unable to find identifier "${name}" on source`);
                 }
-                return field.source;
+                return field.expression;
             }
-            case source instanceof Field: {
-                return processAccess(source.source, name);
+            case source instanceof FieldIdentifier: {
+                const entityField = source.entity.fieldSet.find(source.name);
+                if (!entityField) {
+                    throw new Error(`Unable to find entity field "${source.name}" on defined source`);
+                }
+
+                return processAccess(entityField.expression, name);
             }
-            case source instanceof BinaryExpression:
-            case source instanceof LogicalExpression:
-            case source instanceof TernaryExpression:
-            case source instanceof UnaryExpression:
-                // TODO: We would need to return multiple values from this surely?
-                throw new Error(`not implemented`);
             default:
-                throw new Error(`Unexpected Expression type received "${source.constructor.name}"`);
+                throw new Error(`Unexpected source type "${source.constructor.name}" received`);
         }
     }
 }

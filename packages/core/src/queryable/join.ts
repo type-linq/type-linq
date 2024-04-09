@@ -11,6 +11,9 @@ import {
     WhereClause,
     SubSource,
     FieldIdentifier,
+    Boundary,
+    Entity,
+    FieldSet,
 } from '@type-linq/query-tree';
 
 import { convert } from '../convert/convert.js';
@@ -39,7 +42,6 @@ export function join<TOuter, TInner, TKey, TResult>(
         throw new Error(`Must join sources with the same provider`);
     }
 
-
     const outerExpression = outer.expression;
     const innerExpression = inner.expression;
 
@@ -50,10 +52,10 @@ export function join<TOuter, TInner, TKey, TResult>(
     const globals: Globals = outer.provider.globals;
 
     const outerColumns = processKey(outerAst, outerExpression);
-    const { join: joinExpression, source: innerSource } = ingest(innerExpression);
+    const joinExpression = ingest(innerExpression);
 
     const fieldSet = transformSelect(
-        [outerExpression, innerSource],
+        [outerExpression, joinExpression.joined],
         resultAst,
         outer.provider.globals,
         args,
@@ -66,14 +68,14 @@ export function join<TOuter, TInner, TKey, TResult>(
         }
 
         // We always want a select at the base
-        const select = new SelectExpression(exp.entity, fieldSet);
+        const select = new SelectExpression(fieldSet);
         return select;
     });
-
 
     return expression;
 
     function ingest(expression: Source) {
+        const boundaryId = randString();
         if (canIngest(expression) === false) {
             const subSource = new SubSource(expression);
             const innerKey = processKey(innerAst, expression);
@@ -91,47 +93,47 @@ export function join<TOuter, TInner, TKey, TResult>(
                 innerKey.map(convertField) :
                 convertField(innerKey);
 
-            const condition = createJoinClause(outerColumns, innerColumns);
-            return {
-                source: expression,
-                join: new JoinExpression(
-                    outerExpression,
-                    subSource,
-                    condition,
-                )
-            };
+            const condition = createJoinClause(outerColumns, innerColumns, boundaryId);
+            return new JoinExpression(
+                outerExpression,
+                new Boundary(subSource, boundaryId),
+                condition,
+            )
         }
 
-        // TODO: Later add where expressions and join expressions
-        //  for queries that do not contain aggregates
-        // Remember to add a boundary over every where condition,
-        //  join clause, join source and join linked
+        const boundedFields = Walker.map(expression.fieldSet, (exp) => {
+            if (exp instanceof FieldIdentifier === false) {
+                return exp;
+            }
 
-        // For now we just ingest simple queries (with at most a select statement)
+            return new FieldIdentifier(
+                new Boundary(
+                    exp.entity,
+                    boundaryId
+                ),
+                exp.name,
+                exp.type,
+            );
+        }) as FieldSet;
 
-        const boundaryId = randString();
-        const bounded = expression.boundary(boundaryId);
-
-        const innerSource = Walker.findSource(
-            bounded,
-            (exp) =>
-                exp instanceof SelectExpression ||
-                exp instanceof EntitySource
-        ) as SelectExpression | undefined;
-
-        if (innerSource === undefined) {
-            throw new Error(`Unable to find a SelectExpression or EntitySource`);
-        }
+        const bounded = Walker.mapSource(expression, (exp) => {
+            if (exp instanceof SelectExpression === false && exp instanceof Entity === false) {
+                return exp;
+            }
+            return new SelectExpression(boundedFields);
+        });
 
         const innerColumns = processKey(innerAst, bounded);
-        const condition = createJoinClause(outerColumns, innerColumns);
+        const condition = createJoinClause(outerColumns, innerColumns, boundaryId);
 
+        // When we can ingest it means all we will have left is an EntitySource
+        const innerSource = bounded as EntitySource;
         const joinExpression = new JoinExpression(
             outerExpression,
-            innerSource.entity,
+            new Boundary(innerSource, boundaryId),
             condition,
         );
-        return { join: joinExpression, source: bounded };
+        return joinExpression;
     }
 
     function processKey(expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]): Field | Field[] {
@@ -199,21 +201,21 @@ export function join<TOuter, TInner, TKey, TResult>(
         return new Field(converted, name);
     }
 
-    function createJoinClause(outer: Field | Field[], inner: Field | Field[]): WhereClause {
+    function createJoinClause(outer: Field | Field[], inner: Field | Field[], boundaryId: string): WhereClause {
         if (Array.isArray(outer) && Array.isArray(inner)) {
-            return buildJoinClauses(outer, inner);
+            return buildJoinClauses(outer, inner, boundaryId);
         } else if (Array.isArray(outer) === false && Array.isArray(inner) === false) {
             return new BinaryExpression(
-                outer.source,
+                outer.expression,
                 `==`,
-                inner.source,
+                inner.expression,
             );
         } else {
             throw new Error(`The inner and outer keys returned incompatible result types`);
         }
     }
 
-    function buildJoinClauses(outer: Field[], inner: Field[]): WhereClause {
+    function buildJoinClauses(outer: Field[], inner: Field[], boundaryId: string): WhereClause {
         if (outer.length !== inner.length) {
             throw new Error(`The inner and outer keys returned different number of columns to match on`);
         }
@@ -229,9 +231,9 @@ export function join<TOuter, TInner, TKey, TResult>(
             }
 
             const clause = new BinaryExpression(
-                outerColumm.source,
+                outerColumm.expression,
                 `==`,
-                innerColumn.source,
+                innerColumn.boundary(boundaryId).expression,
             );
 
             if (current === undefined) {
@@ -245,7 +247,10 @@ export function join<TOuter, TInner, TKey, TResult>(
 }
 
 function canIngest(expression: Source) {
+    // TODO: Allow select expression whose fields are
+    //  all directly pointed at the same entity (i.e.
+    // only references to values, no expressions)
+
     // TODO: Add code once we have aggregation functions
-    return expression instanceof SelectExpression ||
-        expression instanceof EntitySource;
+    return expression instanceof EntitySource;
 }

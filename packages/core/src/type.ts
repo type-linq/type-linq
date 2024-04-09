@@ -444,8 +444,6 @@ export type Expression<TType extends ExpressionTypeKey> =
     ? ExpressionBase<`TemplateElement`> & { tail: boolean, value: { raw: string, cooked: string } }
     : ExpressionBase<TType>;
 
-// TODO: Would be nice to add some overrides where expressions are a subset...
-
 type Primitive = number | bigint | string | boolean | undefined;
 
 export type Serializable = Primitive | {

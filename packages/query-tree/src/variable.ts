@@ -1,7 +1,7 @@
 import cloneDeep from 'lodash.clonedeep';
 import isEqual from 'lodash.isequal';
 import { Expression } from './expression.js';
-import { BooleanType, DateType, NullType, NumberType, StringType, Type, scalarUnion } from './type.js';
+import { BooleanType, DateType,  NumberType, StringType, Type, UnknownType, scalarUnion } from './type.js';
 
 export class VariableExpression<TBound = unknown> extends Expression {
     type: Type;
@@ -27,7 +27,7 @@ export class VariableExpression<TBound = unknown> extends Expression {
         const value = this.access();
 
         if (value === null) {
-            this.type = new NullType();
+            this.type = new UnknownType();
             return;
         }
 
@@ -48,7 +48,7 @@ export class VariableExpression<TBound = unknown> extends Expression {
                 this.type = new StringType();
                 break;
             case `undefined`:
-                this.type = new NullType();
+                this.type = new UnknownType();
                 break;
             case `function`:
             case `object`:

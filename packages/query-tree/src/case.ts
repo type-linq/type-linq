@@ -27,7 +27,7 @@ export class CaseBlock extends Expression {
             this.consequent.isEqual(expression.consequent);
     }
 
-    protected rebuild(test: Expression | undefined, consequent: Expression | undefined): Expression {
+    rebuild(test: Expression | undefined, consequent: Expression | undefined): Expression {
         return new CaseBlock(test ?? this.test, consequent ?? this.consequent);
     }
 
@@ -66,7 +66,7 @@ export class CaseBlocks extends Expression {
         );
     }
 
-    protected rebuild(...when: CaseBlock[]): Expression {
+    rebuild(...when: CaseBlock[]): Expression {
         return new CaseBlocks(when);
     }
 
@@ -105,7 +105,7 @@ export class CaseExpression extends Expression {
             this.alternate.isEqual(expression.alternate);
     }
 
-    protected rebuild(when: CaseBlocks | undefined, alternate: Expression | undefined): Expression {
+    rebuild(when: CaseBlocks | undefined, alternate: Expression | undefined): Expression {
         return new CaseExpression(when ?? this.when, alternate ?? this.alternate);
     }
 

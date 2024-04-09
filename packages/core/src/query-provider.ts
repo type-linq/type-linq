@@ -3,16 +3,16 @@ import {
     Expression,
     FieldSet,
     JoinExpression,
-    LinkedEntitySource,
     LogicalExpression,
     WhereClause,
     SelectExpression,
     Source,
-    SubSource,
     Walker,
     WhereExpression,
-    EntityIdentifier,
     Field,
+    FieldIdentifier,
+    Entity,
+    LinkedEntity,
 } from '@type-linq/query-tree';
 import { Globals } from './convert/global.js';
 import { Queryable } from './queryable/queryable.js';
@@ -22,83 +22,60 @@ export abstract class QueryProvider {
     abstract globals: Globals;
 
     finalize(source: Source, forceScalars = false): Source {
+        if (source instanceof Entity) {
+            // If we only have an entity, just handle scalars
+            if (forceScalars) {
+                return new SelectExpression(
+                    source.fieldSet.scalars()
+                );
+            } else {
+                return source;
+            }
+        }
+
         const whereClauses: WhereClause[] = [];
 
         const expression = Walker.mapSource(source, (exp) => {
-            if (exp instanceof Source === false) {
-                return exp;
-            }
-
             // TODO: Note: When we have group by we will need to collect separately
             //  on each side of the group by clause (So things like HAVING can be generated)
             if (exp instanceof WhereExpression) {
                 whereClauses.push(exp.clause);
             }
 
-            const { linkedSources, expression } = extractLinkedSources(this, exp);
-
-            if (linkedSources.length === 0) {
-                if (exp instanceof WhereExpression) {
-                    return exp.source;
+            const sources: EntitySource[] = [];
+            const search = (exp: Expression) => Walker.walk(exp, (exp) => {
+                if (exp instanceof LinkedEntity) {
+                    sources.push(exp);
                 }
-                return exp;
-            }
+                if (exp instanceof FieldIdentifier) {
+                    sources.push(exp.entity);
+                }
+            });
 
-            let current: Source;
             switch (true) {
-                case expression instanceof JoinExpression:
-                case expression instanceof WhereExpression:
-                    current = expression.source;
+                case exp instanceof Entity:
+                case exp instanceof SelectExpression:
+                    search(exp.fieldSet);
+                    break;
+                case exp instanceof JoinExpression:
+                    search(exp.condition);
+                    break;
+                case exp instanceof WhereExpression:
+                    search(exp.clause);
                     break;
                 default:
-                    current = expression;
-                    break;
+                    throw new Error(`Unexpected expression type "${exp.constructor.name}" received`);
             }
 
-            for (const source of linkedSources) {
-                current = processLinked(this, source);
+            let current = source instanceof WhereExpression ?
+                source.source :
+                source;
+
+            for (const source of sources.filter(unique)) {
+                current = source.applyLinked(current);
             }
 
-            if (expression instanceof JoinExpression) {
-                return new JoinExpression(
-                    current,
-                    expression.joined,
-                    expression.condition,
-                );
-            } else {
-                return current;
-            }
-
-            function processLinked(provider: QueryProvider, linked: LinkedEntitySource) {
-                if (linked.linked instanceof LinkedEntitySource) {
-                    processLinked(provider, linked.linked);
-                }
-
-                return new JoinExpression(
-                    current,
-                    linked.source.entity,
-                    linked.clause,
-                );
-            }
-        });
-
-        const joins: JoinExpression[] = [];
-        const deduped = Walker.mapSource(expression, (exp) => {
-            if (exp instanceof JoinExpression === false) {
-                return exp;
-            }
-
-            const existing = joins.find(
-                (join) => join.joined.isEqual(exp.joined) &&
-                    join.condition.isEqual(exp.condition)
-            );
-
-            if (existing) {
-                return exp.source;
-            }
-
-            joins.push(exp);
-            return exp;
+            return current;
         });
 
         const whereClause = whereClauses.reduce<WhereClause | undefined>(
@@ -113,8 +90,8 @@ export abstract class QueryProvider {
         );
 
         const result = whereClause ?
-            new WhereExpression(deduped, whereClause) :
-            deduped;
+            new WhereExpression(expression, whereClause) :
+            expression;
 
         if (forceScalars === false) {
             return result;
@@ -126,42 +103,32 @@ export abstract class QueryProvider {
         //  2. We have an EntityType in one of the columns, in which case we must get all scalar fields
         //     and merge them into the existing fields (with "<Name>"."<Scalar Name>")
 
-        const withSelect = Walker.mapSource(result, (exp) => {
-            if (exp instanceof EntitySource === false) {
-                return exp;
+        const processExplodedField = (parent: string, field: Field) => {
+            return new Field(
+                field.expression,
+                `${parent}.${field.name.name}`,
+            );
+        }
+
+        const explodeEntity = (field: Field) => {
+            if (field.expression instanceof EntitySource === false) {
+                return field;
             }
 
-            // We always want a select at the base
-            const result = new SelectExpression(
-                exp.entity,
-                source.fieldSet.scalars(),
+            return field.expression.fieldSet.scalars().fields.map(
+                (scalarField) => processExplodedField(field.name.name, scalarField)
             );
-            return result;
-        });
+        }
 
-        const fields = withSelect.fieldSet.fields.map(
-            (entityField) => entityField.source instanceof Source ?
-                entityField.source.fieldSet.scalars().fields.map(
-                    (field) => new Field(
-                        field.source,
-                        `${entityField.name.name}.${field.name.name}`,
-                    )
-                ) :
-                entityField
-        ).flat();
-
-        // TODO: This doesn't work because the fields aren't bounded?
-        //  why isn't the Supplier field bounded?
+        const fields = expression.fieldSet.fields.map(explodeEntity).flat();
 
         // Now swap out the base of the branch
-        const finalResult = Walker.mapSource(withSelect, (exp) => {
+        const finalResult = Walker.mapSource(expression, (exp) => {
             if (exp instanceof SelectExpression === false) {
                 return exp;
             }
 
-            // We always want a select at the base
             const result = new SelectExpression(
-                exp.entity,
                 exp.fieldSet.scalar && fields.length === 1 ?
                     new FieldSet(fields[0]) :
                     new FieldSet(fields),
@@ -173,87 +140,8 @@ export abstract class QueryProvider {
     }
 }
 
-function extractLinkedSources(provider: QueryProvider, exp: Source) {
-    let searchExpression: Expression;
-    let linked: Expression;
-    switch (true) {
-        case exp instanceof JoinExpression:
-            searchExpression = exp.condition;
-            linked = exp.source;
-            if (exp.source instanceof SubSource) {
-                linked = new SubSource(
-                    provider.finalize(exp.source.source, false),
-                    exp.source.identifier,
-                );
-            }
-            break;
-        case exp instanceof WhereExpression:
-            searchExpression = exp.clause;
-            linked = exp.source;
-            break;
-        case exp instanceof EntitySource:
-            searchExpression = exp.fieldSet.scalars();
-            linked = exp.entity;
-            break;
-        case exp instanceof SelectExpression:
-            searchExpression = exp.fieldSet;
-            linked = exp.entity;
-            break;
-        default:
-            throw new Error(`Unexpected expression type "${exp.constructor.name}" received`);
-    }
-
-    let linkedSources: LinkedEntitySource[] = [];
-    const cleaned = Walker.map(
-        searchExpression,
-        (exp) => {
-            if (exp instanceof LinkedEntitySource === false) {
-                return exp;
-            }
-            linkedSources.push(exp);
-            return exp.source;
-        },
-        undefined,
-        (exp, { depth }) => {
-            return depth > 0 && exp instanceof FieldSet;
-        }
-    );
-
-    linkedSources = linkedSources.filter(
-        // Make sure they are unique
-        (ele, idx, arr) => arr.findIndex(
-            (item) => item.isEqual(ele)
-        ) === idx
-    );
-
-    let result: Source;
-    switch (true) {
-        case exp instanceof JoinExpression:
-            result = new JoinExpression(
-                linked as Source,
-                exp.joined,
-                cleaned as WhereClause,
-            );
-            break;
-        case exp instanceof WhereExpression:
-            result = new WhereExpression(
-                linked as Source,
-                cleaned as WhereClause,
-            );
-            break;
-        case exp instanceof EntitySource:
-        case exp instanceof SelectExpression:
-            result = new SelectExpression(
-                linked as EntityIdentifier,
-                cleaned as FieldSet,
-            );
-            break;
-        default:
-            return exp;
-    }
-
-    return {
-        expression: result,
-        linkedSources,
-    };
+function unique(item: EntitySource, index: number, arr: EntitySource[]) {
+    return arr.findIndex(
+        (value) => item.isEqual(value)
+    ) === index;
 }

@@ -1,6 +1,8 @@
 import { Expression } from './expression.js';
-import { EntitySource, LinkedEntitySource, SubSource } from './index.js';
+import { EntitySource } from './source/entity.js';
+import { Source } from './source/source.js';
 import { EntityType, Type, UnknownType, isEqual } from './type.js';
+import { LateBound, lateBound } from './util.js';
 
 export class Identifier extends Expression {
     readonly name: string;
@@ -21,7 +23,7 @@ export class Identifier extends Expression {
         return expression.name === this.name;
     }
 
-    protected rebuild(identifier: Expression): Identifier {
+    rebuild(identifier: Expression): Identifier {
         return this;
     }
     
@@ -39,8 +41,6 @@ export class GlobalIdentifier extends Identifier {
         super(name);
         this.#type = type;
     }
-
-    *walk() { }
 
     isEqual(expression?: Expression): boolean {
         if (expression instanceof GlobalIdentifier === false) {
@@ -66,62 +66,52 @@ export class EntityIdentifier extends Identifier {
         super(name);
         this.#type = type;
     }
-
-    *walk() { }
 }
 
-export type FieldSource = EntitySource | LinkedEntitySource | SubSource;
-
 export class FieldIdentifier extends Identifier {
-    readonly #entity: FieldSource | (() => FieldSource);
-    readonly #type: Type | (() => Type | undefined);
+    readonly #entity: () => EntitySource;
+    readonly #type: () => Type;
 
     get entity() {
-        if (typeof this.#entity === `function`) {
-            const result = this.#entity();
-            if (result === undefined) {
-                throw new Error(`Unable to get entity`);
-            }
-            return result;
-        } else {
-            return this.#entity;
-        }
-    }
-
-    get source(): FieldSource {
-        if (this.entity instanceof LinkedEntitySource) {
-            return this.entity.source;
-        }
-        return this.entity;
+        return this.#entity();
     }
 
     get type() {
-        if (typeof this.#type === `function`) {
-            const result = this.#type();
-            if (result === undefined) {
-                throw new Error(`Unable to get type`);
-            }
-            return result;
-        } else {
-            return this.#type;
-        }
+        return this.#type();
     }
     
     constructor(
-        entity: FieldSource | (() => FieldSource),
+        entity: LateBound<EntitySource>,
         name: string,
-        type: Type | (() => Type | undefined)
+        type: LateBound<Type>
     ) {
         super(name);
-        this.#entity = entity;
-        this.#type = type;
+        this.#entity = lateBound(entity);
+        this.#type = lateBound(type);
     }
 
-    protected rebuild(entity: FieldSource): Identifier {
+    rebuild(entity: EntitySource): Identifier {
         return new FieldIdentifier(entity, this.name, this.type);
     }
 
-    *walk() {
-        yield this.entity;
+    /**
+     * Adds any LinkedEntities as joins to the source, and returns the
+     * new source, and the field without LinkedEntities
+     */
+    applyLinked(source: Source) {
+        return this.entity.applyLinked(source);
+    }
+
+    isEqual(expression?: Expression | undefined): boolean {
+        if (expression === this) {
+            return true;
+        }
+
+        if (expression instanceof FieldIdentifier === false) {
+            return false;
+        }
+
+        return super.isEqual(expression) &&
+            this.entity.isEqual(expression.entity);
     }
 }

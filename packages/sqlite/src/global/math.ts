@@ -1,6 +1,6 @@
-import { FunctionType, GlobalIdentifier, NumberType } from '@type-linq/query-tree';
+import { CallArguments, CallExpression, Expression, FunctionType, GlobalIdentifier, NumberType } from '@type-linq/query-tree';
 
-export function identifier(path: string[]) {
+export function identifier(path: string[], args?: Expression[]) {
     if (path.length === 0) {
         throw new Error(`Received empty path`);
     }
@@ -9,7 +9,20 @@ export function identifier(path: string[]) {
         throw new Error(`Unknoen global "Math.${path.join(`.`)}"`);
     }
 
-    switch (path[0]) {
+    const global = createGlobal(path[0]);
+    if (args === undefined) {
+        return global;
+    }
+
+    return new CallExpression(
+        new NumberType(),
+        global,
+        new CallArguments(args),
+    );
+}
+
+function createGlobal(path: string) {
+    switch (path) {
         case `abs`:
         case `acos`:
         case `acosh`:
@@ -37,7 +50,7 @@ export function identifier(path: string[]) {
         case `tan`:
         case `tanh`:
         case `trunc`:
-            return new GlobalIdentifier(path[0], new FunctionType(new NumberType()));
+            return new GlobalIdentifier(path, new FunctionType(new NumberType()));
         case `cbrt`:
         case `clz32`:
         case `expm1`:
@@ -47,6 +60,6 @@ export function identifier(path: string[]) {
         case `fround`:
         case `sign`:
         default:
-            throw new Error(`Math.${path[0]} is not supported`);
+            throw new Error(`Math.${path} is not supported`);
     }
 }

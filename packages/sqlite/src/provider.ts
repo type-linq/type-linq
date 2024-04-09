@@ -13,7 +13,6 @@ import {
     NumberType,
     BooleanType,
     DateType,
-    NullType,
     FunctionType,
     BinaryType,
     UnknownType,
@@ -120,22 +119,30 @@ export class SqliteProvider extends QueryProvider {
             case `Number`:
             case `String`:
             case `Date`:
+            case `parseInt`:
+            case `parseFloat`:
                 return true;
             default:
                 return false;
         }
     }
 
-    #mapIdentifier = (path: string[], args: Expression[]): Expression | undefined => {
+    #mapIdentifier = (path: string[], args?: Expression[]): Expression | undefined => {
         if (path.length === 0) {
             throw new Error(`Received empty path`);
         }
 
         switch (path[0]) {
             case `Math`:
-                return mathIdentifier(path.slice(1));
+                return mathIdentifier(path.slice(1), args);
             case `Number`:
                 return numberIdentifier(path.slice(1), args);
+            case `parseInt`:
+            case `parseFloat`:
+                if (path.length > 1) {
+                    return undefined;
+                }
+                return numberIdentifier([path[0]], args);
             case `String`:
                 return stringIdentifier(path.slice(1), args);
             case `Date`:
@@ -165,7 +172,6 @@ export class SqliteProvider extends QueryProvider {
                 //      And if an expression doesn't exist?
                 //          ignore it?
                 throw new Error(`not implemented`);
-            case type instanceof NullType:
             case type instanceof FunctionType:
             case type instanceof BinaryType:
             case type instanceof UnknownType:

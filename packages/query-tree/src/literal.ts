@@ -1,5 +1,5 @@
 import { Expression } from './expression.js';
-import { BooleanType, DateType, NullType, NumberType, StringType, Type } from './type.js';
+import { BooleanType, DateType, NumberType, StringType, Type, UnknownType } from './type.js';
 
 export type LiteralValue = string | number | boolean | Date | null | undefined
 
@@ -12,7 +12,7 @@ export class Literal extends Expression {
 
         if (value === undefined || value === null) {
             this.value = null;
-            this.type = new NullType();
+            this.type = new UnknownType();
             return;
         }
 

@@ -32,13 +32,17 @@ export function accessor(object: Expression, name: string | symbol, args: Expres
     }
 }
 
-export function identifier(path: string[], args: Expression[]) {
+export function identifier(path: string[], args?: Expression[]) {
     if (path.length === 0) {
         throw new Error(`Received empty path`);
     }
 
     if (path.length !== 1) {
         throw new Error(`Unknown global "Number.${path.join(`.`)}"`);
+    }
+
+    if (args === undefined) {
+        return undefined;
     }
 
     switch (path[0]) {

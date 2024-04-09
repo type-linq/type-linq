@@ -4,7 +4,7 @@ export abstract class Expression {
     abstract readonly type: Type;
 
     abstract isEqual(expression?: Expression): boolean;
-    protected abstract rebuild(...args: (Expression | undefined)[]): Expression;
+    abstract rebuild(...args: (Expression | undefined)[]): Expression;
     abstract walk(): Generator<Expression>;
 
     #shouldRebuild(original: Expression[], updated: (Expression | undefined)[]) {

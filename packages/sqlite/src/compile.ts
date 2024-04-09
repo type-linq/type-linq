@@ -37,11 +37,12 @@ import {
     BooleanType,
     DateType,
     BinaryType,
-    NullType,
     FunctionType,
     EntityType,
     UnknownType,
     UnionType,
+    Entity,
+    LinkedEntity,
 } from '@type-linq/query-tree';
 import { formatter } from './formatter.js';
 
@@ -85,7 +86,6 @@ export function compile(expression: Source): SqlFragment {
                 throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
             }
             select = new SelectExpression(
-                exp.entity,
                 exp.fieldSet.scalars(),
             );
             return;
@@ -118,11 +118,12 @@ export function compile(expression: Source): SqlFragment {
         fmt: formatter,
     };
 
+    const root = select.root();
     const fields = compileExpression(select.fieldSet, {
         ...info,
         aliasField: true,
     });
-    const from = compileExpression(select.entity, info);
+    const from = compileExpression(root, info);
     const joins = joinExpressions.reverse().map((exp) => processJoinExpression(exp, info));
     const where = whereExpression ?
         compileExpression(whereExpression.clause, info) :
@@ -153,26 +154,33 @@ export function compile(expression: Source): SqlFragment {
 
 function compileExpression(expression: Expression, info: CompileInfo): SqlFragment {
     switch (true) {
+        case expression instanceof SelectExpression: {
+            if (expression.fieldSet.scalar) {
+                return compileExpression(expression.fieldSet.field.expression, info);
+            }
+            const root = expression.root();
+
+            if (root instanceof Boundary && root.identifier === info.boundary.at(-1)) {
+                return compileExpression(root.source, info);
+            }
+
+            return compileExpression(root, info);
+        }
         case expression instanceof JoinExpression:
-        case expression instanceof SelectExpression:
         case expression instanceof WhereExpression: {
             if (expression.fieldSet.scalar) {
-                return compileExpression(expression.fieldSet.field.source, info);
+                return compileExpression(expression.fieldSet.field.expression, info);
             }
             throw new Error(`Expected "${expression.constructor.name}". Expected expression to be handled externally`);
         }
-
-        case expression instanceof EntitySource: {
-            return compileExpression(expression.entity, info);
-        }
         case expression instanceof Boundary: {
-            return compileExpression(expression.expression, {
+            return compileExpression(expression.source, {
                 ...info,
                 boundary: [...info.boundary, expression.identifier]
             });
         }
         case expression instanceof Field: {
-            const expr = compileExpression(expression.source, info);
+            const expr = compileExpression(expression.expression, info);
             if (!info.aliasField) {
                 return expr;
             }
@@ -236,9 +244,9 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             };
         }
         case  expression instanceof SubSource: {
-            const { sql: entitySql, variables: entityVariables } = compileExpression(expression.entity, info);
+            const { sql: entitySql, variables: entityVariables } = compileExpression(expression.identifier, info);
             if (info.aliasSource) {
-                const { sql: sourceSql, variables: sourceVariables } = compile(expression.source);
+                const { sql: sourceSql, variables: sourceVariables } = compile(expression.sub);
                 return {
                     sql: info.fmt`(\n\t${sourceSql}\n) AS ${entitySql}`,
                     variables: [...sourceVariables, ...entityVariables],
@@ -248,6 +256,14 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
                 sql: entitySql,
                 variables: entityVariables,
             };
+        }
+        case expression instanceof LinkedEntity: {
+            // Note: Finalize should have handled putting the link information into the
+            //  query tree
+            return compileExpression(expression.source, info);
+        }
+        case expression instanceof Entity: {
+            return compileExpression(expression.identifier, info);
         }
         case expression instanceof VariableExpression: {
             let value: Serializable;
@@ -315,7 +331,7 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
         }
         case expression instanceof FieldIdentifier: {
             const exp = expression as FieldIdentifier;
-            const source = compileExpression(exp.source, info);
+            const source = compileExpression(exp.entity, info);
             return {
                 sql: `${source.sql}.${encodeIdentifier(exp.name)}`,
                 variables: [...source.variables],
@@ -500,7 +516,6 @@ function sqlType(type: Type) {
             // TODO: Needs to be configurable
             return `TEXT`;
         case type instanceof BinaryType:
-        case type instanceof NullType:
         case type instanceof FunctionType:
         case type instanceof EntityType:
         case type instanceof UnknownType:

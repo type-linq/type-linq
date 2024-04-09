@@ -1,40 +1,29 @@
 import { Expression } from '../expression.js';
-import { Identifier } from '../identifier.js';
-import { EntityType, Type, TypeFields, isEqual, isScalar } from '../type.js';
-import { randString } from '../util.js';
+import { FieldIdentifier, Identifier } from '../identifier.js';
+import { EntityType, Type, isEqual, isScalar } from '../type.js';
+import { Walker } from '../walk.js';
+import { Boundary } from './entity.js';
 
 export class Field extends Expression {
     readonly name: Identifier;
-    readonly #source: Expression | (() => Expression);
-
-    get source(): Expression {
-        if (typeof this.#source === `function`) {
-            return this.#source();
-        } else {
-            return this.#source;
-        }
-    }
+    readonly expression: Expression;
 
     get type() {
-        return this.source.type;
+        return this.expression.type;
     }
 
-    constructor(source: Expression | (() => Expression), name: string) {
+    constructor(source: Expression, name: string) {
         super();
         this.name = new Identifier(name);
-        this.#source = source;
+        this.expression = source;
     }
 
     *walk() {
-        // TODO: This can be circular....
-        // We need to somehow ignore entity sources....
-        // (And perhaps just walk yield entity identifier?)
-
-        yield this.source;
+        yield this.expression;
     }
 
     *walkBranch() {
-        yield this.source;
+        yield this.expression;
     }
 
     isEqual(expression: Expression): boolean {
@@ -49,15 +38,21 @@ export class Field extends Expression {
             isEqual(expression.type, this.type);
     }
 
-    rebuild(source: Expression | undefined): Field {
-        return new Field(source ?? this.source, this.name.name);
+    rebuild(expression: Expression | undefined): Field {
+        return new Field(expression ?? this.expression, this.name.name);
     }
 
-    boundary(boundaryId?: string) {
-        return new Field(
-            new Boundary(this.source, boundaryId),
-            this.name.name,
-        );
+    boundary(boundaryId: string) {
+        return Walker.map(this, (exp) => {
+            if (exp instanceof FieldIdentifier === false) {
+                return exp;
+            }
+            return new FieldIdentifier(
+                new Boundary(exp.entity, boundaryId),
+                exp.name,
+                exp.type,
+            );
+        }) as Field;
     }
 }
 
@@ -80,6 +75,7 @@ export class FieldSet extends Expression {
             if (result === undefined) {
                 throw new Error(`Type function returned undefined`);
             }
+            this.#type = result;
             return result;
         }
 
@@ -88,18 +84,11 @@ export class FieldSet extends Expression {
         }
 
         if (this.scalar) {
+            this.#type = this.field.type;
             return this.field.type;
         }
 
-        const cols: TypeFields = this.fields.reduce(
-            (result, field) => {
-                result[field.name.name] = field.type;
-                return result;
-            },
-            { } as TypeFields,
-        );
-
-        const type = new EntityType(cols);
+        const type = new EntityType(this);
         this.#type = type;
         return type;
     }
@@ -169,55 +158,18 @@ export class FieldSet extends Expression {
         return new FieldSet(fields);
     }
 
-    boundary(boundaryId: string) {
-        return new FieldSet(
-            this.fields.map(
-                (field) => field.boundary(boundaryId)
-            ),
-            this.type,
-        )
-    }
-
     scalars() {
         const fields = this.fields.filter(
             (field) => isScalar(field.type)
         );
         return new FieldSet(fields);
     }
-}
 
-export class Boundary<TExpression extends Expression = Expression> extends Expression {
-    readonly identifier: string;
-    readonly expression: TExpression;
-
-    get type() {
-        return this.expression.type;
-    }
-
-    constructor(expression: TExpression, identifier = randString()) {
-        super();
-        this.expression = expression;
-        this.identifier = identifier;
-    }
-
-    isEqual(expression?: Expression | undefined): boolean {
-        if (expression === this) {
-            return true;
-        }
-
-        if (expression instanceof Boundary === false) {
-            return false;
-        }
-
-        return this.identifier === expression.identifier &&
-            this.expression.isEqual(expression.expression);
-    }
-
-    protected rebuild(expression: Expression): Expression {
-        return new Boundary(expression, this.identifier);
-    }
-
-    *walk() {
-        yield this.expression;
+    boundary(boundaryId: string) {
+        const fields = this.fields.filter(
+            (field) => field.boundary(boundaryId)
+        );
+        return new FieldSet(fields);
     }
 }
+

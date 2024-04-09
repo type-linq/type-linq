@@ -8,13 +8,12 @@ import { Expression, ExpressionTypeKey } from '../type.js';
 import { expressionRoot, walkLeaf } from '../walk.js';
 
 export type Globals = {
-    // TODO: We have no way to exclude identifiers!
     hasIdentifier(basePath: string): boolean;
-    mapIdentifier(path: string[], args: QueryExpression[]): QueryExpression | undefined;
+    mapIdentifier(path: string[], args?: QueryExpression[]): QueryExpression | undefined;
     mapAccessor(type: Type, object: QueryExpression, name: string | symbol, args: QueryExpression[]): QueryExpression | undefined;
 };
 
-export function mapGlobalIdentifier(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals, args: QueryExpression[]): QueryExpression {
+export function mapGlobalIdentifier(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals, args?: QueryExpression[]): QueryExpression {
     const source = expressionRoot(expression);
     if (!isGlobalIdentifier(source, globals)) {
         throw new Error(`Expected an expression with a global at it's source to be supplied`);

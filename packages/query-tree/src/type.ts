@@ -1,4 +1,6 @@
-export type Type = StringType | NumberType | BooleanType | NullType | DateType | EntityType | UnionType | FunctionType | UnknownType;
+import { FieldSet } from './source/field.js';
+
+export type Type = StringType | NumberType | BooleanType | DateType | EntityType | UnionType | FunctionType | UnknownType;
 
 export const UNION_TYPES = Symbol(`union-types`);
 
@@ -49,11 +51,6 @@ export class BinaryType {
     readonly [name: string]: Type | undefined;
 }
 
-export class NullType {
-    readonly [TYPE_IDENTIFIER]: `null` = `null`;
-    readonly [name: string]: Type | undefined;
-}
-
 export class FunctionType {
     readonly [TYPE_IDENTIFIER]: `function` = `function`;
     readonly [name: string]: Type | undefined;
@@ -64,31 +61,41 @@ export class FunctionType {
     }
 }
 
-export type TypeFields = {
-    [name: string]: Type | (() => Type);
-}
-
 export class EntityType {
     readonly [TYPE_IDENTIFIER]: `entity` = `entity`;
     readonly [name: string]: Type | undefined;
+    readonly [name: symbol]: unknown;
 
-    constructor(fields: TypeFields) {
-        for (const [name, type] of Object.entries(fields)) {
-            if (typeof type === `function`) {
-                Object.defineProperty(this, name, {
-                    configurable: true,
-                    enumerable: true,
-                    get: type,
-                });
-            } else {
-                Object.defineProperty(this, name, {
-                    configurable: true,
-                    enumerable: true,
-                    value: type,
-                });
+    constructor(fieldSet: FieldSet) {
+        const fields = fieldSet.fields;
+        return new Proxy(this, {
+            ownKeys() {
+                return fields.map((field) => field.name.name);
+            },
+
+            get(target, name) {
+                if (typeof name === `symbol`) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    return target[name];
+                }
+
+                const field = fields.find(
+                    (field) => field.name.name === name
+                );
+
+                if (field === undefined) {
+                    return undefined;
+                }
+
+                return field.type;
+            },
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            set(target: any, name, value) {
+                target[name] = value;
+                return true;
             }
-        }
-        return this as EntityType;
+        });
     }
 }
 
@@ -166,7 +173,6 @@ export const scalarUnion = new UnionType(
     new BooleanType(),
     new StringType(),
     new NumberType(),
-    new NullType(),
     new DateType(),
 );
 

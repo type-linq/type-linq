@@ -137,10 +137,6 @@ function walk<TContext>(
     params: WalkParams<TContext> | undefined,
     context: VisitorContext<TContext>,
 ): WalkResult<void> {
-    if (alreadyVisited(expression, context)) {
-        return {};
-    }
-
     const ctx: VisitorContext<TContext> = {
         context: context.context,
         depth: context.depth + 1,
@@ -214,11 +210,6 @@ function map<TContext>(
         return expression;
     }
 
-    if (alreadyVisited(expression, context)) {
-        const result = visitor(expression, context);
-        return result;
-    }
-
     const ctx: VisitorContext<TContext> = {
         context: context.context,
         depth: context.depth + 1,
@@ -228,7 +219,9 @@ function map<TContext>(
         }
     }
 
-    const expressions = Array.from(expression.walk()).map(
+    const existing = Array.from(expression.walk());
+
+    const expressions = existing.map(
         (exp) => map(exp, visitor, ctx, ignore)
     );
 
@@ -277,10 +270,6 @@ function find<TContext>(
     visitor: Visitor<TContext, boolean | undefined>,
     context: VisitorContext<TContext>,
 ): Expression | undefined {
-    if (alreadyVisited(expression, context)) {
-        return undefined;
-    }
-
     if (visitor(expression, context) === true) {
         return expression;
     }
@@ -309,10 +298,6 @@ function findSource<TContext>(
     visitor: Visitor<TContext, boolean | undefined>,
     context: VisitorContext<TContext>,
 ): Source | undefined {
-    if (alreadyVisited(expression, context)) {
-        return undefined;
-    }
-
     if (visitor(expression, context) === true) {
         return expression;
     }
@@ -339,10 +324,6 @@ function collect<TContext>(
     ignore: (expression: Expression, context: VisitorContext<TContext>) => boolean,
     context: VisitorContext<TContext>,
 ): Expression[] {
-    if (alreadyVisited(expression, context)) {
-        return [];
-    }
-
     if (ignore(expression, context)) {
         return [];
     }
@@ -394,15 +375,4 @@ function collectSource<TContext>(
     }
 
     return result;
-}
-
-function alreadyVisited(expression: Expression, context: VisitorContext<unknown>) {
-    let current = context.parent;
-    while (current) {
-        if (current.node === expression) {
-            return true;
-        }
-        current = current.parent;
-    }
-    return false;
 }

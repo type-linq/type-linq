@@ -24,7 +24,7 @@ export class CastExpression extends Expression {
             isEqual(expression.type, this.type);
     }
 
-    protected rebuild(expression: Expression): Expression {
+    rebuild(expression: Expression): Expression {
         return new CastExpression(expression, this.type);
     }
 

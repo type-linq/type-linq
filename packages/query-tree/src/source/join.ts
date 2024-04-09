@@ -1,12 +1,10 @@
 import { Expression } from '../expression.js';
-import { EntityIdentifier } from '../identifier.js';
-import { Boundary } from './field.js';
+import { Boundary, BoundedEntitySource } from './entity.js';
 import { Source } from './source.js';
-import { SubSource } from './sub.js';
 import { WhereClause } from './where.js';
 
 export class JoinExpression extends Source {
-    readonly joined: EntityIdentifier | Boundary<EntityIdentifier> | SubSource;
+    readonly joined: BoundedEntitySource;
     readonly condition: WhereClause;
 
     get source() {
@@ -19,7 +17,7 @@ export class JoinExpression extends Source {
 
     constructor(
         source: Source,
-        joined: EntityIdentifier | Boundary<EntityIdentifier> | SubSource,
+        joined: Boundary,
         condition: WhereClause,
     ) {
         super(source);
@@ -41,9 +39,9 @@ export class JoinExpression extends Source {
             this.condition.isEqual(expression.condition);
     }
 
-    protected rebuild(
+    rebuild(
         source: Source | undefined,
-        joined: EntityIdentifier | undefined,
+        joined: Boundary | undefined,
         condition: WhereClause | undefined
     ): Expression {
         return new JoinExpression(
