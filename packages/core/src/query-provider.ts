@@ -13,6 +13,7 @@ import {
     FieldIdentifier,
     Entity,
     LinkedEntity,
+    OrderExpression,
 } from '@type-linq/query-tree';
 import { Globals } from './convert/global.js';
 import { Queryable } from './queryable/queryable.js';
@@ -62,6 +63,9 @@ export abstract class QueryProvider {
                     break;
                 case exp instanceof WhereExpression:
                     search(exp.clause);
+                    break;
+                case exp instanceof OrderExpression:
+                    search(exp.expression);
                     break;
                 default:
                     throw new Error(`Unexpected expression type "${exp.constructor.name}" received`);

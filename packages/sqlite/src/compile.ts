@@ -43,6 +43,7 @@ import {
     UnionType,
     Entity,
     LinkedEntity,
+    OrderExpression,
 } from '@type-linq/query-tree';
 import { formatter } from './formatter.js';
 
@@ -70,6 +71,7 @@ type CompileInfo = {
 export function compile(expression: Source): SqlFragment {
     let select: SelectExpression = undefined!;
     let whereExpression: WhereExpression = undefined!;
+    const orderExpressions: OrderExpression[] = [];
     const joinExpressions: JoinExpression[] = [];
 
     Walker.walkSource(expression, (exp) => {
@@ -101,6 +103,11 @@ export function compile(expression: Source): SqlFragment {
 
         if (exp instanceof JoinExpression) {
             joinExpressions.push(exp);
+            return;
+        }
+
+        if (exp instanceof OrderExpression) {
+            orderExpressions.push(exp);
             return;
         }
 
@@ -141,6 +148,31 @@ export function compile(expression: Source): SqlFragment {
         );
     }
 
+    const orders = orderExpressions.reverse().map(
+        (expression) => {
+            const { sql, variables } = compileExpression(
+                expression.expression,
+                info,
+            );
+
+            if (expression.descending) {
+                return {
+                    sql: `${sql} DESC`,
+                    variables,
+                };
+            } else {
+                return {
+                    sql: `${sql} ASC`,
+                    variables,
+                }
+            }
+        }
+    );
+
+    if (orders.length > 0) {
+        parts.push(info.fmt`ORDER BY\n\t${orders.map((ord) => ord.sql).join(`,\n`)}`)        
+    }
+
     return {
         sql: parts.join(`\n`),
         variables: [
@@ -148,6 +180,7 @@ export function compile(expression: Source): SqlFragment {
             ...from.variables,
             ...joins.map((jn) => jn.variables).flat(),
             ...(where ? where.variables : []),
+            ...orders.map((ord) => ord.variables).flat(),
         ]
     };
 }

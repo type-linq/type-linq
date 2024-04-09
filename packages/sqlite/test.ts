@@ -208,29 +208,29 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     // // TODO: Why is the column in the where clause not fully qualified?
     // //  There must be somewhere we are not adding scope to the identifier...?
 
-    const query2 = products
-        .select((c) => ({
-            productId: c.ProductID,
-            name: c.ProductName,
-            supplier: c.Supplier.CompanyName,
-        }))
-        // .select((c) => ({
-        //     productId: c.productId,
-        //     name: c.name,
-        //     supplier: c.supplier,
-        // }))
-        .where((c) => c.supplier > arg, { arg })
-        .join(
-            suppliers,
-            (c) => c.supplier,
-            (c) => c.CompanyName,
-            (outer, inner) => ({
-                productId: outer.productId,
-                name: outer.name,
-                supplier: outer.supplier,
-                supplierId: inner.SupplierID,
-            })
-        )
+    // const query2 = products
+    //     .select((c) => ({
+    //         productId: c.ProductID,
+    //         name: c.ProductName,
+    //         supplier: c.Supplier.CompanyName,
+    //     }))
+    //     // .select((c) => ({
+    //     //     productId: c.productId,
+    //     //     name: c.name,
+    //     //     supplier: c.supplier,
+    //     // }))
+    //     .where((c) => c.supplier > arg, { arg })
+    //     .join(
+    //         suppliers,
+    //         (c) => c.supplier,
+    //         (c) => c.CompanyName,
+    //         (outer, inner) => ({
+    //             productId: outer.productId,
+    //             name: outer.name,
+    //             supplier: outer.supplier,
+    //             supplierId: inner.SupplierID,
+    //         })
+    //     )
 
     // const query3 = suppliers
     //     .where((c) => c.CompanyName.length > 10);
@@ -254,7 +254,7 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     // const query7 = products
     //     .select((c) => ({
     //         name: c.ProductName,
-    //         stock: Math.max(c.UnitsInStock as number, 10),
+    //         stock: Math.max(c.UnitsInStock!, 10),
     //     }))
 
     // const query7 = products
@@ -266,19 +266,22 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     //         (c) => c.SupplierID,
     //         (c) => c.SupplierID,
     //         (o, i) => ({
-    //             id: o.ProductID,
+    //             id: o.ProductID, 
     //             name: o.ProductName,
     //             supplier: i.CompanyName,
     //         })
     //     )
 
-    // const query8 = products
-    //     .select((c) => ({
-    //         productId: c.ProductID,
-    //         supplier: c.Supplier,
-    //     }))
+    const query8 = products
+        .select((c) => ({
+            productId: c.ProductID,
+            name: c.ProductName,
+            supplier: c.Supplier,
+        }))
+        .orderBy((c) => c.name)
+        .thenBy((c) => c.supplier.CompanyName);
 
-    for await (const product of query2) {
+    for await (const product of query8) {
         console.dir(product);
     }
 
