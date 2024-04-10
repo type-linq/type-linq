@@ -136,6 +136,7 @@ export abstract class QueryProvider {
                 exp.fieldSet.scalar && fields.length === 1 ?
                     new FieldSet(fields[0]) :
                     new FieldSet(fields),
+                exp.distinct,
             );
             return result;
         });

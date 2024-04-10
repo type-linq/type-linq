@@ -135,9 +135,13 @@ export function compile(expression: Source): SqlFragment {
     const where = whereExpression ?
         compileExpression(whereExpression.clause, info) :
         undefined;
+
+    const distinct = select.distinct ?
+        ` DISTINCT ` :
+        ``;
     
     const parts: string[] = [
-        info.fmt`SELECT\n\t${fields.sql}`,
+        info.fmt`SELECT${distinct}\n\t${fields.sql}`,
         info.fmt`FROM ${from.sql}`,
         ...joins.map((jn) => jn.sql),
     ];

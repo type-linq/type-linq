@@ -6,15 +6,17 @@ import { FieldSet } from './field.js';
 import { Source } from './source.js';
 
 export class SelectExpression extends Source {
+    distinct: boolean;
     fieldSet: FieldSet;
 
     get source() {
         return undefined;
     }
 
-    constructor(fieldSet: FieldSet) {
+    constructor(fieldSet: FieldSet, distinct = false) {
         super();
         this.fieldSet = fieldSet;
+        this.distinct = distinct;
     }
 
     isEqual(expression?: Expression): boolean {
@@ -34,7 +36,7 @@ export class SelectExpression extends Source {
     }
 
     rebuild(fieldSet: FieldSet): SelectExpression {
-        return new SelectExpression(fieldSet);
+        return new SelectExpression(fieldSet, this.distinct);
     }
 
     *walk() {

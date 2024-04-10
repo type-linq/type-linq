@@ -6,6 +6,7 @@ import { join } from './join.js';
 import { Map, Merge, Predicate, Serializable } from '../type.js';
 import { SchemaType, StandardType } from '../schema-type.js';
 import { orderBy, orderByDescending, thenBy, thenByDescending } from './order.js';
+import { distinct } from './distinct.js';
 
 export class Queryable<TElement> {
     readonly provider: QueryProvider;
@@ -108,6 +109,14 @@ export class Queryable<TElement> {
         return new Queryable<TElement>(
             this.provider,
             expression,
-        );        
+        );
+    }
+
+    distinct() {
+        const expression = distinct(this);
+        return new Queryable<TElement>(
+            this.provider,
+            expression,
+        );
     }
 }

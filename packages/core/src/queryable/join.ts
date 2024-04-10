@@ -68,7 +68,7 @@ export function join<TOuter, TInner, TKey, TResult>(
         }
 
         // We always want a select at the base
-        const select = new SelectExpression(fieldSet);
+        const select = new SelectExpression(fieldSet, exp.distinct);
         return select;
     });
 
@@ -120,7 +120,7 @@ export function join<TOuter, TInner, TKey, TResult>(
             if (exp instanceof SelectExpression === false && exp instanceof Entity === false) {
                 return exp;
             }
-            return new SelectExpression(boundedFields);
+            return new SelectExpression(boundedFields, exp instanceof SelectExpression ? exp.distinct : false);
         });
 
         const innerColumns = processKey(innerAst, bounded);

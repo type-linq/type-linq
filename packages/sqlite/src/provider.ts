@@ -63,7 +63,7 @@ export class SqliteProvider extends QueryProvider {
         log.debug(`=======================================`);
 
         const results = await this.run<TResult>(sql, variables);
-        log.debug(`Got ""${results.length}" results`);
+        log.debug(`Got ${results.length} results`);
         log.debug(`=======================================`);
 
         const convert = postProcess(expression);

@@ -56,7 +56,7 @@ export function select<TElement, TMapped>(
         }
 
         // We always want a select at the base
-        const result = new SelectExpression(transformed);
+        const result = new SelectExpression(transformed, exp instanceof SelectExpression ? exp.distinct : false);
         return result;
     });
 
