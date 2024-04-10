@@ -44,6 +44,7 @@ import {
     Entity,
     LinkedEntity,
     OrderExpression,
+    GroupExpression,
 } from '@type-linq/query-tree';
 import { formatter } from './formatter.js';
 
@@ -71,10 +72,12 @@ type CompileInfo = {
 export function compile(expression: Source): SqlFragment {
     let select: SelectExpression = undefined!;
     let whereExpression: WhereExpression = undefined!;
+    let groupExpression: GroupExpression = undefined!;
+    let havingExpression: WhereExpression = undefined!;
     const orderExpressions: OrderExpression[] = [];
     const joinExpressions: JoinExpression[] = [];
 
-    Walker.walkSource(expression, (exp) => {
+    Walker.walkSourceUp(expression, (exp) => {
         if (exp instanceof SelectExpression) {
             if (select) {
                 throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
@@ -94,10 +97,17 @@ export function compile(expression: Source): SqlFragment {
         }
 
         if (exp instanceof WhereExpression) {
-            if (whereExpression) {
-                throw new Error(`Mutliple WhereExpressions found on branch`);
+            if (groupExpression) {
+                if (havingExpression) {
+                    throw new Error(`Mutliple WhereExpressions found on branch`);
+                }
+                havingExpression = exp;
+            } else {
+                if (whereExpression) {
+                    throw new Error(`Mutliple WhereExpressions found on branch`);
+                }
+                whereExpression = exp;
             }
-            whereExpression = exp;
             return;
         }
 
@@ -108,6 +118,14 @@ export function compile(expression: Source): SqlFragment {
 
         if (exp instanceof OrderExpression) {
             orderExpressions.push(exp);
+            return;
+        }
+
+        if (exp instanceof GroupExpression) {
+            if (groupExpression) {
+                throw new Error(`Multiple GroupExpressions found on source`);
+            }
+            groupExpression = exp;
             return;
         }
 
@@ -130,15 +148,22 @@ export function compile(expression: Source): SqlFragment {
         ...info,
         aliasField: true,
     });
+
+    const distinct = select.distinct ?
+        ` DISTINCT ` :
+        ``;
     const from = compileExpression(root, info);
     const joins = joinExpressions.reverse().map((exp) => processJoinExpression(exp, info));
     const where = whereExpression ?
         compileExpression(whereExpression.clause, info) :
         undefined;
 
-    const distinct = select.distinct ?
-        ` DISTINCT ` :
-        ``;
+    const group = groupExpression ?
+        compileExpression(groupExpression.by, info) :
+        undefined;
+    const having = havingExpression ?
+        compileExpression(havingExpression.clause, info) :
+        undefined;
     
     const parts: string[] = [
         info.fmt`SELECT${distinct}\n\t${fields.sql}`,
@@ -147,9 +172,15 @@ export function compile(expression: Source): SqlFragment {
     ];
 
     if (where) {
-        parts.push(
-            `WHERE ${where.sql}`
-        );
+        parts.push(`WHERE\n\t${where.sql}`);
+    }
+
+    if (group) {
+        parts.push(`GROUP BY\n\t${group.sql}`);
+    }
+
+    if (having) {
+        parts.push(`HAVING\n\t${having.sql}`);
     }
 
     const orders = orderExpressions.reverse().map(
@@ -184,6 +215,8 @@ export function compile(expression: Source): SqlFragment {
             ...from.variables,
             ...joins.map((jn) => jn.variables).flat(),
             ...(where ? where.variables : []),
+            ...(group ? group.variables : []),
+            ...(having ? having.variables : []),
             ...orders.map((ord) => ord.variables).flat(),
         ]
     };
@@ -204,6 +237,7 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             return compileExpression(root, info);
         }
         case expression instanceof JoinExpression:
+        case expression instanceof GroupExpression:
         case expression instanceof WhereExpression: {
             if (expression.fieldSet.scalar) {
                 return compileExpression(expression.fieldSet.field.expression, info);

@@ -1,25 +1,19 @@
 import {
-    Expression,
-    Field,
     OrderExpression,
     Source,
-    Walker
+    Walker,
+    Expression,
 } from '@type-linq/query-tree';
 
-import { convert } from '../convert/convert.js';
-import { readName } from '../convert/util.js';
-import { Serializable, Map as ValueMap, Expression as AstExpression, ExpressionTypeKey } from '../type.js';
+import { Serializable, Func, Expression as AstExpression } from '../type.js';
 import { Queryable } from './queryable.js';
-import { buildSources, varsName } from './util.js';
-import { SCALAR_NAME } from './select.js';
-import { Globals } from '../convert/global.js';
 import { parseFunction } from './parse.js';
-
-// TODO: Seems some of the fields after this order by have linked entity expressions?
+import { processKey } from './util.js';
+import { Globals } from '../convert/global.js';
 
 export function orderBy<TElement, TKey>(
     source: Queryable<TElement>,
-    key: ValueMap<TElement, TKey>,
+    key: Func<TKey, [TElement]>,
     args?: Serializable,
 ): Source {
     Walker.walkSource(source.expression, (exp) => {
@@ -31,7 +25,7 @@ export function orderBy<TElement, TKey>(
     });
 
     const keyAst = parseFunction(key, 1, args);
-    const fields = processKey(
+    const fields = processOrderKey(
         args,
         source.provider.globals,
         keyAst,
@@ -51,7 +45,7 @@ export function orderBy<TElement, TKey>(
 
 export function orderByDescending<TElement, TKey>(
     source: Queryable<TElement>,
-    key: ValueMap<TElement, TKey>,
+    key: Func<TKey, [TElement]>,
     args?: Serializable,
 ): Source {
     Walker.walkSource(source.expression, (exp) => {
@@ -63,7 +57,7 @@ export function orderByDescending<TElement, TKey>(
     });
 
     const keyAst = parseFunction(key, 1, args);
-    const fields = processKey(
+    const fields = processOrderKey(
         args,
         source.provider.globals,
         keyAst,
@@ -83,7 +77,7 @@ export function orderByDescending<TElement, TKey>(
 
 export function thenBy<TElement, TKey>(
     source: Queryable<TElement>,
-    key: ValueMap<TElement, TKey>,
+    key: Func<TKey, [TElement]>,
     args?: Serializable,
 ): Source {
     let flag = false;
@@ -100,7 +94,7 @@ export function thenBy<TElement, TKey>(
     }
 
     const keyAst = parseFunction(key, 1, args);
-    const fields = processKey(
+    const fields = processOrderKey(
         args,
         source.provider.globals,
         keyAst,
@@ -120,7 +114,7 @@ export function thenBy<TElement, TKey>(
 
 export function thenByDescending<TElement, TKey>(
     source: Queryable<TElement>,
-    key: ValueMap<TElement, TKey>,
+    key: Func<TKey, [TElement]>,
     args?: Serializable,
 ): Source {
     let flag = false;
@@ -137,7 +131,7 @@ export function thenByDescending<TElement, TKey>(
     }
 
     const keyAst = parseFunction(key, 1, args);
-    const fields = processKey(
+    const fields = processOrderKey(
         args,
         source.provider.globals,
         keyAst,
@@ -155,74 +149,10 @@ export function thenByDescending<TElement, TKey>(
     return current;
 }
 
-function processKey(
-    args: Serializable | undefined,
-    globals: Globals | undefined,
-    expression: AstExpression<`ArrowFunctionExpression`>,
-    ...sources: Expression[]
-): Field[] {
-    const sourceMap = buildSources(expression, ...sources);
-    const vars = varsName(expression);
-
-    switch (expression.body.type) {
-        case `ArrayExpression`:
-            return expression.body.elements.map(
-                (element, index) => processKeyValue(args, globals, element, String(index), vars, sourceMap)
-            );
-        case `ObjectExpression`:
-            return expression.body.properties.map(
-                (property) => {
-                    if (property.type !== `Property`) {
-                        throw new Error(`Expected ObjectExpression.properties to all be "Property" Expressions`);
-                    }
-                    const name = readName(property.key) as string;
-                    return processKeyValue(args, globals, property.value, name, vars, sourceMap);
-                }
-            );
-        default: {
-            let name: string;
-            switch (expression.body.type) {
-                case `MemberExpression`:
-                    name = readName(expression.body.property) as string;
-                    break;
-                case `Literal`:
-                    name = String(expression.body.value);
-                    break;
-                default:
-                    name = SCALAR_NAME;
-                    break;
-            }
-            return [processKeyValue(args, globals, expression.body, name, vars, sourceMap)];
-        }
+function processOrderKey(args: Serializable, globals: Globals, expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]) {
+    const key = processKey(args, globals, expression, ...sources);
+    if (Array.isArray(key)) {
+        return key;
     }
-}
-
-function processKeyValue(
-    args: Serializable | undefined,
-    globals: Globals | undefined,
-    expression: AstExpression<ExpressionTypeKey>,
-    name: string,
-    varsName: string | undefined,
-    sources: Record<string, Expression>,
-) {
-    switch (expression.type) {
-        case `Identifier`:
-        case `MemberExpression`:
-        case `CallExpression`:
-        case `Literal`:
-        case `TemplateLiteral`:
-            break;
-        default:
-            throw new Error(`Unsupported column Expression.type "${expression.type}"`);
-    }
-
-    const converted = convert(
-        sources,
-        expression,
-        varsName,
-        globals,
-        args,
-    );
-
-    return new Field(converted, name);
+    return [key];
 }

@@ -1,6 +1,8 @@
 import { BinaryExpression, LogicalExpression, MatchExpression } from '../binary.js';
 import { Source } from './source.js';
 import { Expression } from '../expression.js';
+import { GroupExpression } from './group.js';
+import { Walker } from '../walk.js';
 
 export type WhereClause = LogicalExpression | BinaryExpression | MatchExpression;
 
@@ -49,5 +51,33 @@ export class WhereExpression extends Source {
     *walk() {
         yield this.source;
         yield this.clause;
+    }
+
+    collapse() {
+        const whereClauses: WhereClause[] = [];
+        const expression = Walker.mapSource(this, (exp) => {
+            if (exp instanceof WhereExpression === false) {
+                return exp;
+            }
+
+            whereClauses.push(exp.clause);
+            return exp.source;
+        }, undefined, (exp) => exp instanceof GroupExpression);
+
+        const collapsed = whereClauses.reduce<WhereClause | undefined>(
+            (result, clause) => {
+                if (result === undefined) {
+                    return clause;
+                } else {
+                    return new LogicalExpression(result, `&&`, clause);
+                }
+            },
+            undefined,
+        );
+
+        return new WhereExpression(
+            expression,
+            collapsed!,
+        );
     }
 }

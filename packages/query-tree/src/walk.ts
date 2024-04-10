@@ -55,6 +55,18 @@ export class Walker {
         });
     }
 
+    static walkSourceUp<TContext = void>(
+        expression: Source,
+        visitor: Visitor<TContext, void, Source>,
+        context?: TContext,
+    ) {
+        walkSourceUp(expression, visitor, {
+            context,
+            depth: 0,
+            parent: undefined,
+        });
+    }
+
     static map<TContext>(
         expression: Expression,
         visitor: Visitor<TContext, Expression>,
@@ -198,6 +210,27 @@ function walkSource<TContext>(
     if (expression.source !== undefined) {
         walkSource(expression.source, visitor, ctx);
     }
+}
+
+function walkSourceUp<TContext>(
+    expression: Source,
+    visitor: Visitor<TContext, void, Source>,
+    context: VisitorContext<TContext>,
+) {
+    const ctx: VisitorContext<TContext> = {
+        context: context.context,
+        depth: context.depth + 1,
+        parent: {
+            parent: context.parent,
+            node: expression,
+        }
+    };
+
+    if (expression.source !== undefined) {
+        walkSourceUp(expression.source, visitor, ctx);
+    }
+
+    visitor(expression, context)
 }
 
 function map<TContext>(

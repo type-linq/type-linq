@@ -450,6 +450,7 @@ export type Serializable = Primitive | {
     [name: string | number]: Serializable | Serializable[];
 };
 
-export type Predicate<TElement, TArgs> = (element: TElement, args: TArgs) => boolean;
-export type Map<TInput, TOutput> = (input: TInput) => TOutput;
-export type Merge<TInput1, TInput2, TOutput> = (input1: TInput1, input2: TInput2) => TOutput;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyFunc = (args: any) => any;
+
+export type Func<TResult, TArgs extends unknown[] = unknown[]> = (...args: TArgs) => TResult;

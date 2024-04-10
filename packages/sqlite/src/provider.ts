@@ -58,7 +58,7 @@ export class SqliteProvider extends QueryProvider {
         const { sql, variables } = this.compile(expression);
 
         log.debug(`Executing SQL`);
-        log.debug(sql);
+        log.debug(sql.replaceAll(`\t`, `    `));
         log.debug(variables);
         log.debug(`=======================================`);
 

@@ -12,6 +12,8 @@ export function postProcess(expression: Source) {
 
         for (const field of expression.fieldSet) {
             switch (true) {
+                case result[field.name.name] === null:
+                    break;
                 case field.type instanceof BooleanType:
                     result[field.name.name] = Boolean(result[field.name.name]);
                     break;

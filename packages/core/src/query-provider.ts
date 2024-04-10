@@ -3,8 +3,6 @@ import {
     Expression,
     FieldSet,
     JoinExpression,
-    LogicalExpression,
-    WhereClause,
     SelectExpression,
     Source,
     Walker,
@@ -14,6 +12,7 @@ import {
     Entity,
     LinkedEntity,
     OrderExpression,
+    GroupExpression,
 } from '@type-linq/query-tree';
 import { Globals } from './convert/global.js';
 import { Queryable } from './queryable/queryable.js';
@@ -23,6 +22,9 @@ export abstract class QueryProvider {
     abstract globals: Globals;
 
     finalize(source: Source, forceScalars = false): Source {
+
+        // TODO: Limit the fields of sub sources to only those used
+
         if (source instanceof Entity) {
             // If we only have an entity, just handle scalars
             if (forceScalars) {
@@ -34,15 +36,7 @@ export abstract class QueryProvider {
             }
         }
 
-        const whereClauses: WhereClause[] = [];
-
         const expression = Walker.mapSource(source, (exp) => {
-            // TODO: Note: When we have group by we will need to collect separately
-            //  on each side of the group by clause (So things like HAVING can be generated)
-            if (exp instanceof WhereExpression) {
-                whereClauses.push(exp.clause);
-            }
-
             const sources: EntitySource[] = [];
             const search = (exp: Expression) => Walker.walk(exp, (exp) => {
                 if (exp instanceof LinkedEntity) {
@@ -63,42 +57,27 @@ export abstract class QueryProvider {
                     break;
                 case exp instanceof WhereExpression:
                     search(exp.clause);
+                    exp = exp.collapse();
                     break;
                 case exp instanceof OrderExpression:
                     search(exp.expression);
+                    break;
+                case exp instanceof GroupExpression:
+                    search(exp.by);
                     break;
                 default:
                     throw new Error(`Unexpected expression type "${exp.constructor.name}" received`);
             }
 
-            let current = source instanceof WhereExpression ?
-                source.source :
-                source;
-
+            let current = exp;
             for (const source of sources.filter(unique)) {
                 current = source.applyLinked(current);
             }
-
             return current;
         });
 
-        const whereClause = whereClauses.reduce<WhereClause | undefined>(
-            (result, clause) => {
-                if (result === undefined) {
-                    return clause;
-                } else {
-                    return new LogicalExpression(result, `&&`, clause);
-                }
-            },
-            undefined,
-        );
-
-        const result = whereClause ?
-            new WhereExpression(expression, whereClause) :
-            expression;
-
         if (forceScalars === false) {
-            return result;
+            return expression;
         }
 
         // There are 2 distinct cases we need to handle...

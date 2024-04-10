@@ -281,12 +281,34 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     //     .orderBy((c) => c.name)
     //     .thenBy((c) => c.supplier.CompanyName);
 
-    const query9 = suppliers
-        .select((c) => c.Region)
-        .distinct();
+    // const query9 = suppliers
+    //     .select((c) => c.Region)
+    //     .distinct();
+
+    // const query10 = products
+    //     .groupBy((c) => c.Supplier.Region!)
+    //     .select((c) => ({
+    //         region: c.Supplier.Region,
+    //         stock: Math.max(c.UnitsInStock!)
+    //     }))
+    //     .orderByDescending((c) => c.stock);
 
 
-    for await (const product of query9) {
+    const query11 = products
+        .where((c) => c.UnitsInStock! > 10)
+        .groupBy(
+            (c) => c.Supplier.Region!,
+            (c) => c.UnitsInStock!,
+            (key, product) => ({
+                region: key,
+                stock: Math.max(product),
+            })
+        )
+        .where((c) => c.stock > 100)
+        .orderByDescending((c) => c.stock);
+
+
+    for await (const product of query11) {
         console.dir(product);
     }
 

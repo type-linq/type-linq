@@ -1,5 +1,4 @@
 import {
-    EntitySource,
     Field,
     FieldSet,
     SelectExpression,
@@ -13,7 +12,7 @@ import { Queryable } from './queryable.js';
 import {
     Expression as AstExpression,
     ExpressionTypeKey as AstExpressionTypeKey,
-    Map,
+    Func,
     Serializable,
 } from '../type.js';
 import { parseFunction } from './parse.js';
@@ -25,7 +24,7 @@ export const SCALAR_NAME = `__scalar__11cbd49f`;
 
 export function select<TElement, TMapped>(
     source: Queryable<TElement>,
-    map: Map<SchemaType<TElement>, TMapped>,
+    map: Func<TMapped, [SchemaType<TElement>]>,
     args?: Serializable,
 ) {
     const ast = parseFunction(map, 1, args);
@@ -37,33 +36,34 @@ export function select<TElement, TMapped>(
         args,
     );
 
-    let entitySource: SelectExpression | EntitySource | undefined;
-    entitySource = Walker.findSource(source.expression, (exp) => exp instanceof SelectExpression) as SelectExpression | undefined;
-    if (entitySource === undefined) {
-        if (source.expression instanceof EntitySource) {
-            entitySource = source.expression;
-        }
-    }
-
-    if (entitySource === undefined) {
-        throw new Error(`Unable to find a SelectExpression or EntitySource`);
-    }
-
-    // Now swap out the base of the branch
-    const result = Walker.mapSource(entitySource, (exp) => {
-        if (exp.source) {
-            return exp;
-        }
-
-        // We always want a select at the base
-        const result = new SelectExpression(transformed, exp instanceof SelectExpression ? exp.distinct : false);
-        return result;
-    });
+    const result = transformSource(source.expression, transformed);
 
     return new Queryable<StandardType<TMapped>>(
         source.provider,
         result,
     );
+}
+
+export function transformSource<TSource extends Source>(
+    source: TSource,
+    fields: FieldSet,
+) {
+    // Now swap out the base of the branch
+    const result = Walker.mapSource(source, (exp) => {
+        if (exp.source) {
+            return exp;
+        }
+
+        // We always want a select at the base
+        const result = new SelectExpression(
+            fields,
+            exp instanceof SelectExpression ?
+                exp.distinct :
+                false
+            );
+        return result;
+    });
+    return result as TSource;
 }
 
 export function transformSelect(
