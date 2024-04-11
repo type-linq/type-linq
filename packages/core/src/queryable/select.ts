@@ -20,7 +20,10 @@ import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
 import { SchemaType, StandardType } from '../schema-type.js';
 
+// TODO: Does this make sense in this file? Perhaps in a constants file?
 export const SCALAR_NAME = `__scalar__11cbd49f`;
+
+// TODO: Add the overload that accepts an integer index which allows for row_number
 
 export function select<TElement, TMapped>(
     source: Queryable<TElement>,

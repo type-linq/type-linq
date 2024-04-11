@@ -10,26 +10,31 @@
 // thenBy
 // thenByDescending
 // distinct
-
-// Definite TODO
+// groupBy
+// skip
+// take
 // first
 // firstOrDefault
 // single
 // singleOrDefault
-// count
 // defaultIfEmpty
-// groupBy
+// prepend
+// append
+
+// Definite TODO
+
+
 // groupJoin
+
+// count
 // max
 // maxBy
 // min
 // minBy
 // sum
-// skip
-// take
+// average
 
 // Maybe TODO
-// average
 // all
 // any
 // contains
@@ -47,8 +52,6 @@
 // lastOrDefault
 // reverse
 // aggregate
-// prepend
-// append    
 // chunk
 // exceptBy
 // intersectBy

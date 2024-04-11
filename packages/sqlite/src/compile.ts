@@ -45,10 +45,20 @@ import {
     LinkedEntity,
     OrderExpression,
     GroupExpression,
+    SkipExpression,
+    TakeExpression,
+    TransformExpression,
+    SetTransform,
+    ItemTramsform,
 } from '@type-linq/query-tree';
 import { formatter } from './formatter.js';
 
-export type SqlFragment = {
+export type SqlInfo = SqlFragment & {
+    setTransforms: SetTransform[];
+    itemTransforms: ItemTramsform[];
+};
+
+type SqlFragment = {
     sql: string;
     variables: Serializable[];
 }
@@ -69,72 +79,18 @@ type CompileInfo = {
 
 // TODO: Go through and make sur we have all exprssion types
 
-export function compile(expression: Source): SqlFragment {
-    let select: SelectExpression = undefined!;
-    let whereExpression: WhereExpression = undefined!;
-    let groupExpression: GroupExpression = undefined!;
-    let havingExpression: WhereExpression = undefined!;
-    const orderExpressions: OrderExpression[] = [];
-    const joinExpressions: JoinExpression[] = [];
-
-    Walker.walkSourceUp(expression, (exp) => {
-        if (exp instanceof SelectExpression) {
-            if (select) {
-                throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
-            }
-            select = exp;
-            return;
-        }
-
-        if (exp instanceof EntitySource) {
-            if (select) {
-                throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
-            }
-            select = new SelectExpression(
-                exp.fieldSet.scalars(),
-            );
-            return;
-        }
-
-        if (exp instanceof WhereExpression) {
-            if (groupExpression) {
-                if (havingExpression) {
-                    throw new Error(`Mutliple WhereExpressions found on branch`);
-                }
-                havingExpression = exp;
-            } else {
-                if (whereExpression) {
-                    throw new Error(`Mutliple WhereExpressions found on branch`);
-                }
-                whereExpression = exp;
-            }
-            return;
-        }
-
-        if (exp instanceof JoinExpression) {
-            joinExpressions.push(exp);
-            return;
-        }
-
-        if (exp instanceof OrderExpression) {
-            orderExpressions.push(exp);
-            return;
-        }
-
-        if (exp instanceof GroupExpression) {
-            if (groupExpression) {
-                throw new Error(`Multiple GroupExpressions found on source`);
-            }
-            groupExpression = exp;
-            return;
-        }
-
-        throw new Error(`Unexpected source expression type "${exp.constructor.name}" received`);
-    });
-
-    if (select === undefined) {
-        throw new Error(`No SelectExpression was found on the branch`);
-    }
+export function compile(expression: Source): SqlInfo {
+    const {
+        select,
+        whereExpression,
+        groupExpression,
+        havingExpression,
+        skipExpression,
+        takeExpression,
+        orderExpressions,
+        joinExpressions,
+        transforms,
+    } = extractQueryComponents(expression);
 
     const info: CompileInfo = {
         alias: {},
@@ -184,7 +140,204 @@ export function compile(expression: Source): SqlFragment {
     }
 
     const orders = orderExpressions.reverse().map(
-        (expression) => {
+        (expression) => compileExpression(expression, info)
+    );
+    if (orders.length > 0) {
+        parts.push(info.fmt`ORDER BY\n\t${orders.map((ord) => ord.sql).join(`,\n`)}`)        
+    }
+
+    if (takeExpression) {
+        parts.push(`LIMIT ${takeExpression.count}`);
+    }
+    if (skipExpression) {
+        if (!takeExpression) {
+            parts.push(`LIMIT -1`);
+        }
+        parts.push(`OFFSET ${skipExpression.count}`);
+    }
+
+    return {
+        sql: parts.join(`\n`),
+        variables: [
+            ...fields.variables,
+            ...from.variables,
+            ...joins.map((jn) => jn.variables).flat(),
+            ...(where ? where.variables : []),
+            ...(group ? group.variables : []),
+            ...(having ? having.variables : []),
+            ...orders.map((ord) => ord.variables).flat(),
+        ],
+        setTransforms: transforms
+            .filter((tfm) => tfm.set)
+            .map((tfm) => tfm.set!),
+        itemTransforms: transforms
+            .filter((tfm) => tfm.item)
+            .map((tfm) => tfm.item!),
+    };
+}
+
+function extractQueryComponents(expression: Source) {
+    let select: SelectExpression = undefined!;
+    let whereExpression: WhereExpression = undefined!;
+    let groupExpression: GroupExpression = undefined!;
+    let havingExpression: WhereExpression = undefined!;
+    let skipExpression: SkipExpression = undefined!;
+    let takeExpression: SkipExpression = undefined!;
+    const orderExpressions: OrderExpression[] = [];
+    const joinExpressions: JoinExpression[] = [];
+    const transforms: TransformExpression[] = [];
+
+    Walker.walkSourceUp(expression, (exp) => {
+        if (exp instanceof TransformExpression) {
+            transforms.push(exp);
+            return;
+        }
+
+        if (transforms.length) {
+            throw new Error(`All transforms MUST be at the top of the expression`);
+        }
+
+        if (exp instanceof SelectExpression) {
+            if (select) {
+                throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
+            }
+            select = exp;
+            return;
+        }
+
+        if (exp instanceof EntitySource) {
+            if (select) {
+                throw new Error(`Mutliple SelectExpression or EntitySource found on branch`);
+            }
+            select = new SelectExpression(
+                exp.fieldSet.scalars(),
+            );
+            return;
+        }
+
+        if (exp instanceof WhereExpression) {
+            if (groupExpression) {
+                if (havingExpression) {
+                    throw new Error(`Mutliple WhereExpressions found on branch`);
+                }
+                havingExpression = exp;
+            } else {
+                if (whereExpression) {
+                    throw new Error(`Mutliple WhereExpressions found on branch`);
+                }
+                whereExpression = exp;
+            }
+            return;
+        }
+
+        if (exp instanceof JoinExpression) {
+            joinExpressions.push(exp);
+            return;
+        }
+
+        if (exp instanceof OrderExpression) {
+            orderExpressions.push(exp);
+            return;
+        }
+
+        if (exp instanceof SkipExpression) {
+            if (skipExpression) {
+                skipExpression = new SkipExpression(
+                    exp.source,
+                    Math.max(
+                        skipExpression.count,
+                        exp.count,
+                    )
+                );
+            } else {
+                skipExpression = exp;
+            }
+            return;
+        }
+
+        if (exp instanceof TakeExpression) {
+            if (takeExpression) {
+                takeExpression = new TakeExpression(
+                    exp.source,
+                    Math.min(
+                        takeExpression.count,
+                        exp.count,
+                    )
+                );
+            } else {
+                takeExpression = exp;
+            }
+            return;
+        }
+
+        // Note: Everything from here should be aggregate expressions
+
+        if (skipExpression) {
+            // TODO: Maybe we should be making a sub source?
+            throw new Error(`Skip cannot appear before aggregate call (e.g. GroupExpression)`);
+        }
+
+        if (takeExpression) {
+            // TODO: Maybe we should be making a sub source?
+            throw new Error(`Take cannot appear before aggregate call (e.g. GroupExpression)`);
+        }
+
+        if (orderExpressions.length) {
+            // TODO: Maybe we should be making a sub source? (Only makes sense with order if there is another
+            //  expression in the source chain that is something that requires a sub source
+            throw new Error(`OrderExpression cannot be before aggregate call (e.g. GroupExpression)`);
+        }
+
+        if (exp instanceof GroupExpression) {
+            if (groupExpression) {
+                throw new Error(`Multiple GroupExpressions found on source`);
+            }
+            groupExpression = exp;
+            return;
+        }
+
+        throw new Error(`Unexpected source expression type "${exp.constructor.name}" received`);
+    });
+
+    if (select === undefined) {
+        throw new Error(`No SelectExpression was found on the branch`);
+    }
+
+    return {
+        select,
+        whereExpression,
+        groupExpression,
+        havingExpression,
+        skipExpression,
+        takeExpression,
+        orderExpressions,
+        joinExpressions,
+        transforms,
+    };
+}
+
+function compileExpression(expression: Expression, info: CompileInfo): SqlFragment {
+    switch (true) {
+        case expression instanceof SelectExpression: {
+            if (expression.fieldSet.scalar) {
+                return compileExpression(expression.fieldSet.field.expression, info);
+            }
+
+            // TODO: Does this make sense? THink about it and put a comment why...
+            const root = expression.root();
+            return compileExpression(root, info);
+        }
+        case expression instanceof JoinExpression:
+        case expression instanceof GroupExpression:
+        case expression instanceof SkipExpression:
+        case expression instanceof TakeExpression:
+        case expression instanceof WhereExpression: {
+            if (expression.fieldSet.scalar) {
+                return compileExpression(expression.fieldSet.field.expression, info);
+            }
+            throw new Error(`Expected "${expression.constructor.name}". Expected expression to be handled externally`);
+        }
+        case expression instanceof OrderExpression: {
             const { sql, variables } = compileExpression(
                 expression.expression,
                 info,
@@ -202,49 +355,16 @@ export function compile(expression: Source): SqlFragment {
                 }
             }
         }
-    );
-
-    if (orders.length > 0) {
-        parts.push(info.fmt`ORDER BY\n\t${orders.map((ord) => ord.sql).join(`,\n`)}`)        
-    }
-
-    return {
-        sql: parts.join(`\n`),
-        variables: [
-            ...fields.variables,
-            ...from.variables,
-            ...joins.map((jn) => jn.variables).flat(),
-            ...(where ? where.variables : []),
-            ...(group ? group.variables : []),
-            ...(having ? having.variables : []),
-            ...orders.map((ord) => ord.variables).flat(),
-        ]
-    };
-}
-
-function compileExpression(expression: Expression, info: CompileInfo): SqlFragment {
-    switch (true) {
-        case expression instanceof SelectExpression: {
-            if (expression.fieldSet.scalar) {
-                return compileExpression(expression.fieldSet.field.expression, info);
-            }
-            const root = expression.root();
-
-            if (root instanceof Boundary && root.identifier === info.boundary.at(-1)) {
-                return compileExpression(root.source, info);
-            }
-
-            return compileExpression(root, info);
-        }
-        case expression instanceof JoinExpression:
-        case expression instanceof GroupExpression:
-        case expression instanceof WhereExpression: {
-            if (expression.fieldSet.scalar) {
-                return compileExpression(expression.fieldSet.field.expression, info);
-            }
-            throw new Error(`Expected "${expression.constructor.name}". Expected expression to be handled externally`);
-        }
         case expression instanceof Boundary: {
+            const existingIndex = info.boundary.indexOf(expression.identifier);
+            if (existingIndex > -1 && existingIndex < info.boundary.length - 1) {
+                throw new Error(`Circular boundary detected`);
+            }
+
+            if (existingIndex === -1) {
+                return compileExpression(expression.source, info);
+            }
+
             return compileExpression(expression.source, {
                 ...info,
                 boundary: [...info.boundary, expression.identifier]
@@ -317,7 +437,10 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
         case  expression instanceof SubSource: {
             const { sql: entitySql, variables: entityVariables } = compileExpression(expression.identifier, info);
             if (info.aliasSource) {
-                const { sql: sourceSql, variables: sourceVariables } = compile(expression.sub);
+                const { sql: sourceSql, variables: sourceVariables, setTransforms, itemTransforms } = compile(expression.sub);
+                if (setTransforms.length || itemTransforms.length) {
+                    throw new Error(`A SubSource cannot have transforms`);
+                }
                 return {
                     sql: info.fmt`(\n\t${sourceSql}\n) AS ${entitySql}`,
                     variables: [...sourceVariables, ...entityVariables],

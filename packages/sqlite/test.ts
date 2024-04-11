@@ -294,21 +294,46 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     //     .orderByDescending((c) => c.stock);
 
 
-    const query11 = products
-        .where((c) => c.UnitsInStock! > 10)
-        .groupBy(
-            (c) => c.Supplier.Region!,
-            (c) => c.UnitsInStock!,
-            (key, product) => ({
-                region: key,
-                stock: Math.max(product),
-            })
-        )
-        .where((c) => c.stock > 100)
-        .orderByDescending((c) => c.stock);
+    // const query11 = products
+    //     .where((c) => c.UnitsInStock! > 10)
+    //     .groupBy(
+    //         (c) => c.Supplier.Region!,
+    //         (c) => c.UnitsInStock!,
+    //         (key, product) => ({
+    //             region: key,
+    //             stock: Math.max(product),
+    //         })
+    //     )
+    //     .where((c) => c.stock > 100)
+    //     .orderByDescending((c) => c.stock);
+
+    // const query12 = products
+    //     .skip(3)
+    //     .take(2);
+
+    // const query13 = products
+    //     .where((c) => c.UnitsInStock! > 10)
+    //     .groupBy(
+    //         (c) => c.Supplier.Region!,
+    //         (c) => c.UnitsInStock!,
+    //         (key, product) => ({
+    //             region: key,
+    //             stock: Math.max(product),
+    //         })
+    //     )
+    //     // .where((c) => c.stock > 100)
+    //     .skip(2)
+    //     .orderByDescending((c) => c.stock);
+
+    const query14 = products
+        .where((c) => c.ProductName === 'foo')
+        .defaultIfEmpty({
+            foo: `bar`,
+        } as unknown as Product);
 
 
-    for await (const product of query11) {
+
+    for await (const product of query14) {
         console.dir(product);
     }
 

@@ -13,6 +13,9 @@ import {
     LinkedEntity,
     OrderExpression,
     GroupExpression,
+    TakeExpression,
+    SkipExpression,
+    TransformExpression,
 } from '@type-linq/query-tree';
 import { Globals } from './convert/global.js';
 import { Queryable } from './queryable/queryable.js';
@@ -64,6 +67,10 @@ export abstract class QueryProvider {
                     break;
                 case exp instanceof GroupExpression:
                     search(exp.by);
+                    break;
+                case exp instanceof TakeExpression:
+                case exp instanceof SkipExpression:
+                case exp instanceof TransformExpression:
                     break;
                 default:
                     throw new Error(`Unexpected expression type "${exp.constructor.name}" received`);

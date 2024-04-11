@@ -10,8 +10,16 @@ export function postProcess(expression: Source) {
             throw new Error(`Expected result to be an object`);
         }
 
+        // TODO: Collapse scalars?
+        //  Thinking about sub selections (through an object expression) those will
+        //  have an issue with scalar exploding....
+
         for (const field of expression.fieldSet) {
+            if (result[field.name.name] === undefined) {
+                continue;
+            }
             switch (true) {
+                case result[field.name.name] === undefined:
                 case result[field.name.name] === null:
                     break;
                 case field.type instanceof BooleanType:

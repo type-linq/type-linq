@@ -55,28 +55,35 @@ export class SqliteProvider extends QueryProvider {
 
     async *execute<TResult>(source: Queryable<TResult>): AsyncGenerator<TResult> {
         const expression = this.finalize(source.expression, true);
-        const { sql, variables } = this.compile(expression);
+        const { sql, variables, setTransforms, itemTransforms } = this.compile(expression);
 
         log.debug(`Executing SQL`);
         log.debug(sql.replaceAll(`\t`, `    `));
         log.debug(variables);
         log.debug(`=======================================`);
 
-        const results = await this.run<TResult>(sql, variables);
+        let results = await this.run<TResult>(sql, variables);
         log.debug(`Got ${results.length} results`);
         log.debug(`=======================================`);
 
         const convert = postProcess(expression);
 
+        for (const transform of setTransforms) {
+            results = transform(results) as TResult[];
+        }
+
         for (const result of results) {
-            const converted = convert(result);
-            yield converted as TResult;
+            let current = convert(result);
+            for (const transform of itemTransforms) {
+                current = transform(current);
+            }
+            yield current as TResult;
         }
     }
 
     compile(expression: Source) {
-        const { sql, variables } = compile(expression);
-        return { sql, variables };
+        const { sql, variables, setTransforms, itemTransforms } = compile(expression);
+        return { sql, variables, setTransforms, itemTransforms };
     }
 
     async run<TResult>(sql: string, variables: Serializable[]) {

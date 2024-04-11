@@ -9,6 +9,8 @@ import { SchemaType, StandardType } from '../schema-type.js';
 import { orderBy, orderByDescending, thenBy, thenByDescending } from './order.js';
 import { distinct } from './distinct.js';
 import { groupBy } from './group.js';
+import { first, firstOrDefault, single, singleOrDefault, skip, take } from './range.js';
+import { append, defaultIfEmpty, prepend } from './transform.js';
 
 export type GroupResult<TElement, TMapped, TResult> =
     TResult extends undefined
@@ -150,13 +152,46 @@ export class Queryable<TElement> {
         );
 
         return new Queryable(this.provider, expression) as GroupResult<TElement, TMapped, TResult>;
+    }
 
-        // TODO: Why is this producing a union type if element and key elements?
+    skip(count: number) {
+        const expression = skip(this, count);
+        return new Queryable<TElement>(this.provider, expression);
+    }
 
-        // return new Queryable(this.provider, expression) as TResultMap extends AnyFunc
-        //     ? Queryable<TResult>
-        //     : TElementMap extends AnyFunc
-        //     ? Queryable<{ key: TKey, elements: TMapped }>
-        //     : Queryable<TElement>;
+    take(count: number) {
+        const expression = take(this, count);
+        return new Queryable<TElement>(this.provider, expression);
+    }
+
+    first() {
+        return first(this);
+    }
+
+    firstOrDefault(defaultValue: TElement) {
+        return firstOrDefault(this, defaultValue);
+    }
+
+    single() {
+        return single(this);
+    }
+
+    singleOrDefault(defaultValue: TElement) {
+        return singleOrDefault(this, defaultValue);
+    }
+
+    defaultIfEmpty(defaultValue: TElement) {
+        const expression = defaultIfEmpty(this, defaultValue);
+        return new Queryable<TElement>(this.provider, expression);
+    }
+
+    prepend(elements: TElement[]) {
+        const expression = prepend(this, elements);
+        return new Queryable<TElement>(this.provider, expression);
+    }
+
+    append(elements: TElement[]) {
+        const expression = append(this, elements);
+        return new Queryable<TElement>(this.provider, expression);
     }
 }

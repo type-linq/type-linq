@@ -6,3 +6,5 @@ export * from './where.js';
 export * from './join.js';
 export * from './order.js';
 export * from './group.js';
+export * from './range.js';
+export * from './transform.js';
