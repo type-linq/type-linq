@@ -1,84 +1,37 @@
 import { SkipExpression, Source, TakeExpression } from '@type-linq/query-tree';
-import { Queryable } from './queryable.js';
 
 export function skip(
-    source: Queryable<unknown>,
+    source: Source,
     count: number,
 ): Source {
-    const expression = new SkipExpression(source.expression, count);
+    const expression = new SkipExpression(source, count);
     return expression;
 }
 
 export function take(
-    source: Queryable<unknown>,
+    source: Source,
     count: number,
 ): Source {
-    const expression = new TakeExpression(source.expression, count);
+    const expression = new TakeExpression(source, count);
     return expression;
 }
 
-export async function first<TElement>(
-    source: Queryable<TElement>
-) {
+export function first(source: Source) {
     const limited = take(source, 1);
-    const query = new Queryable<TElement>(source.provider, limited);
-    for await (const result of query) {
-        return result;
-    }
-
-    throw new Error(`Sequence contains no results`);
+    return limited;
 }
 
-export async function firstOrDefault<TElement>(
-    source: Queryable<TElement>,
-    defaultValue: TElement,
-) {
+export function firstOrDefault(source: Source) {
     const limited = take(source, 1);
-    const query = new Queryable<TElement>(source.provider, limited);
-    for await (const result of query) {
-        return result;
-    }
-
-    return defaultValue;
+    return limited;
 }
 
-export async function single<TElement>(
-    source: Queryable<TElement>
-) {
+export function single(source: Source) {
     const limited = take(source, 2);
-    const query = new Queryable<TElement>(source.provider, limited);
-    let result: TElement | undefined = undefined;
-    for await (const item of query) {
-        if (result !== undefined) {
-            throw new Error(`Sequence contains multiple results`);
-        }
-        result = item;
-    }
-
-    if (result === undefined) {
-        throw new Error(`Sequence contains no results`);
-    }
-
-    return result as TElement;
+    return limited;
 }
 
-export async function singleOrDefault<TElement>(
-    source: Queryable<TElement>,
-    defaultValue: TElement,
-) {
-    const limited = take(source, 2);
-    const query = new Queryable<TElement>(source.provider, limited);
-    let result: TElement | undefined = undefined;
-    for await (const item of query) {
-        if (result !== undefined) {
-            throw new Error(`Sequence contains multiple results`);
-        }
-        result = item;
-    }
-
-    if (result === undefined) {
-        return defaultValue;
-    }
-
-    return result as TElement;
+export function singleOrDefault(source: Source) {
+    const limited = take(source, 1);
+    return limited;
 }

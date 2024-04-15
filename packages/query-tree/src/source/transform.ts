@@ -1,7 +1,7 @@
 import { Expression } from '../expression.js';
 import { Source } from './source.js';
 
-export type SetTransform = (results: unknown[]) => unknown;
+export type SetTransform = (results: unknown[]) => unknown[];
 export type ItemTramsform = (result: unknown) => unknown;
 
 export class TransformExpression extends Source {

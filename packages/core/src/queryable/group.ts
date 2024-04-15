@@ -1,38 +1,33 @@
 import { Field, FieldSet, GroupExpression, SelectExpression, Source, Walker } from '@type-linq/query-tree';
-import { Func, Serializable } from '../type.js';
-import { Queryable } from './queryable.js';
+import { Expression as AstExpression, Serializable } from '../type.js';
 import { processKey } from './util.js';
-import { parseFunction } from './parse.js';
 import { transformSelect, transformSource } from './select.js';
+import { QueryProvider } from '../query-provider.js';
 
 
-export function groupBy<TElement, TKey, TMapped, TResult>(
-    source: Queryable<TElement>,
-    key: Func<TKey, [TElement]>,
-    element?: Func<TMapped, [TElement]>,
-    result?: Func<TResult, [TKey, TMapped]>,
+export function groupBy(
+    provider: QueryProvider,
+    source: Source,
+    keyAst: AstExpression<`ArrowFunctionExpression`>,
+    elementAst?: AstExpression<`ArrowFunctionExpression`>,
+    resultAst?: AstExpression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ) {
-
-    Walker.walkSource(source.expression, (exp) => {
+    Walker.walkSource(source, (exp) => {
         if (exp instanceof GroupExpression) {
             throw new Error(`Cannot call groupBy multiple tmes`);
         }
     });
 
-    const keyAst = parseFunction(key, 1, args);
-    const elementAst = element && parseFunction(element, 1, args);
-    const resultAst = result && parseFunction(result, 2, args);
-
     const fields = processKey(
         args,
-        source.provider.globals,
+        provider.globals,
         keyAst,
-        source.expression,
+        source,
     );
 
     const groupBy = new GroupExpression(
-        source.expression,
+        source,
         new FieldSet(fields),
     );
 
@@ -45,7 +40,7 @@ export function groupBy<TElement, TKey, TMapped, TResult>(
         const fieldSet = transformSelect(
             [groupBy],
             elementAst,
-            source.provider.globals,
+            provider.globals,
             args,
         );
 
@@ -73,7 +68,7 @@ export function groupBy<TElement, TKey, TMapped, TResult>(
     const fieldSet = transformSelect(
         [keySelect, elementSource ?? groupBy],
         resultAst,
-        source.provider.globals,
+        provider.globals,
         args,
     );
 

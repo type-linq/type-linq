@@ -1,11 +1,7 @@
 import { Entity, SelectExpression, Source, Walker } from '@type-linq/query-tree';
-import { Queryable } from './queryable.js';
 
-export function distinct<TElement>(
-    source: Queryable<TElement>
-): Source {
-
-    return Walker.mapSource(source.expression, (exp) => {
+export function distinct(source: Source): Source {
+    return Walker.mapSource(source, (exp) => {
         switch (true) {
             case exp instanceof SelectExpression:
             case exp instanceof Entity:

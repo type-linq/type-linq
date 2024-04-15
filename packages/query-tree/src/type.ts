@@ -62,7 +62,7 @@ export class FunctionType {
 }
 
 export class EntityType {
-    readonly [TYPE_IDENTIFIER]: `entity` = `entity`;
+    readonly [TYPE_IDENTIFIER]: `entity` | `entitySet` = `entity`;
     readonly [name: string]: Type | undefined;
     readonly [name: symbol]: unknown;
 
@@ -83,6 +83,10 @@ export class EntityType {
                     (field) => field.name.name === name
                 );
 
+                if (field === undefined && name === `constructor`) {
+                    return EntityType;
+                }
+
                 if (field === undefined) {
                     return undefined;
                 }
@@ -97,6 +101,19 @@ export class EntityType {
             }
         });
     }
+}
+
+export class EntitySet extends EntityType {
+    readonly [TYPE_IDENTIFIER]: `entity` | `entitySet` = `entitySet`;
+
+    constructor(fieldSet: FieldSet) {
+        super(fieldSet);
+
+        // TODO: We actually need a Proxy here since we don't want to
+        //  overwrite columns with functions
+    }
+
+    // TODO
 }
 
 export class UnionTypeProxy {

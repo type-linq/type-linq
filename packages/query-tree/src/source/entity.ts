@@ -1,6 +1,6 @@
 import { Expression } from '../expression.js';
 import { EntityIdentifier, FieldIdentifier } from '../identifier.js';
-import { EntityType } from '../type.js';
+import { EntitySet, EntityType } from '../type.js';
 import { LateBound, lateBound, randString } from '../util.js';
 import { Walker } from '../walk.js';
 import { FieldSet } from './field.js';
@@ -169,6 +169,28 @@ export class LinkedEntity extends EntitySource {
     #fieldSet?: FieldSet;
     #clause: () => WhereClause;
 
+    #setType?: EntitySet;
+    readonly set?: boolean;
+
+    get type() {
+        if (this.#setType) {
+            return this.#setType;
+        }
+
+        if (this.set) {
+            this.#setType = new EntitySet(this.fieldSet);
+            return this.#setType;
+        } else {
+            return this.fieldSet.type;
+        }
+    }
+
+    // TODO: Add set here?
+    //  But type is in FieldSet....
+    //  Maybe just a set wrapper?
+
+    // Perhaps we just adjust the type of the LinkedEntity......
+
     get source(): BoundedEntitySource {
         return this.#source();
     }
@@ -214,12 +236,14 @@ export class LinkedEntity extends EntitySource {
         linked: LateBound<EntitySource>,
         source: LateBound<BoundedEntitySource>,
         clause: LateBound<WhereClause>,
+        set?: boolean,
     ) {
         super();
 
         this.#linked = lateBound(linked);
         this.#source = lateBound(source);
         this.#clause = lateBound(clause);
+        this.set = set;
     }
 
     links(): LinkedEntity[] {
@@ -237,7 +261,8 @@ export class LinkedEntity extends EntitySource {
 
         return this.source.isEqual(expression.source) &&
             this.linked.isEqual(expression.linked) &&
-            this.clause.isEqual(expression.clause);
+            this.clause.isEqual(expression.clause) &&
+            Boolean(this.set) === Boolean(expression.set);
     }
 
     rebuild(
@@ -249,6 +274,7 @@ export class LinkedEntity extends EntitySource {
             linked ?? this.linked,
             source ?? this.source,
             clause ?? this.clause,
+            this.set,
         );
     }
 

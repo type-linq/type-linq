@@ -1,6 +1,9 @@
 import { Expression } from '../expression.js';
 import { Source } from './source.js';
 
+// TODO: These are wrong... 
+//  The counts need to be able to accept expressions... (e.g. vars....)
+
 export class SkipExpression extends Source {
     readonly count: number;
 

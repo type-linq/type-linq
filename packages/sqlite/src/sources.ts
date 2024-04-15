@@ -18,13 +18,31 @@ import {
     EntityType,
 } from '@type-linq/query-tree';
 
-import { DatabaseSchema } from './schema.js';
+import { DatabaseSchema, TableColumns, TableSchema } from './schema.js';
 import { randString } from './util.js';
 
 export function buildSources(schema: DatabaseSchema) {
     const sources: Record<string, EntitySource> = {};
 
+    // TODO: We need to identify many to many relationships...
+    //  We can assume a many to many relatonship is a table where
+    //  every column is a foreign key, and all foreign keys
+    //  point to exactly 2 tables....
+
+    // TODO: Views!
+
+    const linkTables: TableSchema[] = [];
+
     for (const [name, table] of Object.entries(schema.tables)) {
+        // TODO: Determine link tables....
+    }
+
+    for (const [name, table] of Object.entries(schema.tables)) {
+        const linkTable = linkTables.find((table) => table.name === table.name);
+        if (linkTable) {
+            continue;
+        }
+
         const fields: Field[] = [];
 
         for (const [name, column] of Object.entries(table.columns)) {
@@ -42,6 +60,12 @@ export function buildSources(schema: DatabaseSchema) {
 
         for (const [linkName, { table: tableName, columns }] of Object.entries(table.links)) {
             const boundaryId = randString();
+
+            // TODO: For one to many relationships we need entity sets!
+            // TODO: We need to be able to identifier many to many relationships and setup LinkedEntitys accordingly....
+
+            // One to many relationships should be represented by searching for all links pointing to this table
+            //  OR where the columns pointing to the table are not primary key of said table
 
             const source = () => sources[table.name];
             const linked: () => LinkedEntity = () => new LinkedEntity(

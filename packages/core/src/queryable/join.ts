@@ -16,37 +16,26 @@ import {
 } from '@type-linq/query-tree';
 
 import { randString } from '../convert/util.js';
-import { Func, Serializable } from '../type.js';
-import { parseFunction } from './parse.js';
+import { Expression as AstExpression, Serializable } from '../type.js';
 import { Globals } from '../convert/global.js';
 import { transformSelect } from './select.js';
-import { Queryable } from './queryable.js';
 import { processKey } from './util.js';
+import { QueryProvider } from '../query-provider.js';
 
 // TODO: Add override that will take inner and 2 functions...
 //  1. A function that will return a logical expression used to join
 //  2. A result selector
 
-export function join<TOuter, TInner, TKey, TResult>(
-    outer: Queryable<TOuter>,
-    inner: Queryable<TInner>,
-    outerKey: Func<TKey, [TOuter]>,
-    innerKey: Func<TKey, [TInner]>,
-    result: Func<TResult, [TOuter, TInner]>,
+export function join(
+    provider: QueryProvider,
+    outerExpression: Source,
+    innerExpression: Source,
+    outerAst: AstExpression<`ArrowFunctionExpression`>,
+    innerAst: AstExpression<`ArrowFunctionExpression`>,
+    resultAst: AstExpression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ): Source {
-    if (outer.provider !== inner.provider) {
-        throw new Error(`Must join sources with the same provider`);
-    }
-
-    const outerExpression = outer.expression;
-    const innerExpression = inner.expression;
-
-    const outerAst = parseFunction(outerKey, 1, args);
-    const innerAst = parseFunction(innerKey, 1, args);
-    const resultAst = parseFunction(result, 2, args);
-
-    const globals: Globals = outer.provider.globals;
+    const globals: Globals = provider.globals;
 
     const outerColumns = processKey(args, globals, outerAst, outerExpression);
     const joinExpression = ingest(innerExpression);
@@ -54,7 +43,7 @@ export function join<TOuter, TInner, TKey, TResult>(
     const fieldSet = transformSelect(
         [outerExpression, joinExpression.joined],
         resultAst,
-        outer.provider.globals,
+        provider.globals,
         args,
     );
 

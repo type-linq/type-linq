@@ -16,11 +16,16 @@ import {
     FieldIdentifier,
     FunctionType,
     CallArguments,
+    Expression,
+    Type,
+    UnknownType,
+    Walker,
 } from '@type-linq/query-tree';
 import { readName } from './util.js';
-import { Expression, ExpressionTypeKey, Operator, Serializable } from '../type.js';
+import { Expression as AstExpression, ExpressionTypeKey, Operator, Serializable } from '../type.js';
 import { walk } from '../walk.js';
 import { Globals, isGlobalIdentifier, mapGlobalIdentifier, mapGlobalAccessor } from './global.js';
+import { QueryableEmbedded } from '../queryable/queryable.js';
 export type Sources = Record<string | symbol, QueryExpression>;
 
 export type ConvertOptions = {
@@ -28,18 +33,85 @@ export type ConvertOptions = {
     convertLogical?: boolean;
 };
 
+// We need to make sure that we never return one of these... we always need to make sure
+//  it's a Queryable, and then return the Queryable expression.....
+class DirectExpression<TValue> extends Expression {
+    readonly type: Type = new UnknownType();
+    readonly value: TValue;
+
+    constructor(value: TValue) {
+        super();
+        this.value = value;
+    }
+
+    isEqual(expression?: Expression): boolean {
+        if (expression === this) {
+            return true;
+        }
+
+        if (expression instanceof DirectExpression === false) {
+            return false;
+        }
+
+        return this.value === expression.value;
+    }
+
+    rebuild(): QueryExpression {
+        return this;
+    }
+
+    *walk() { }
+}
+
 export function convert(
     sources: Sources,
-    expression: Expression<ExpressionTypeKey>,
+    expression: AstExpression<ExpressionTypeKey>,
     varsName?: string | symbol,
     globals?: Globals,
     args?: Serializable,
     options?: ConvertOptions,
 ): QueryExpression {
-    return process(expression);
+    // TODO: We're still missing arrow functions...
+    //  we need to handle the args to the Queryable calls,
+    //  and those contain functions////
 
-    function process(expression: Expression<ExpressionTypeKey>): QueryExpression {
+    const exp = process(expression);
+    const result = Walker.map(exp, (exp) => {
+        if (exp instanceof DirectExpression === false) {
+            return exp;
+        }
+
+        if (exp.value instanceof QueryableEmbedded === false) {
+            throw new Error(`Exprected remaining Direct expressions to only contain Queryables directly`);
+        }
+
+        return exp.value.expression;
+    });
+
+    return result;
+
+    function process(expression: AstExpression<ExpressionTypeKey>): QueryExpression {
         switch (expression.type) {
+            case `ArrowFunctionExpression`: {
+                // TODO: How to build the sources...
+                // TODO: How to get the vars name....
+                //  We need to process the AST first....
+                //  TODO: ... no... the call we made should have processed the AST....
+                //      What we do need to do is bind the args if we have them.....
+
+                // TODO: We may need to pass a QueryableEmbedded in here...
+
+                return convert(
+                    subSources,
+                    expression.body,
+                    subVarsName,
+                    globals,
+                    options,
+                );
+
+                // TODO: Required for queryable calls....
+                throw new Error(`not implemented`);
+            }
             case `ExternalExpression`:
                 return processExternal(expression);
             case `Identifier`:
@@ -165,7 +237,7 @@ export function convert(
         }
     }
 
-    function processIdentifier(expression: Expression<`Identifier`>): QueryExpression {
+    function processIdentifier(expression: AstExpression<`Identifier`>): QueryExpression {
         if (expression.name === `undefined`) {
             return new Literal(null);
         }
@@ -173,6 +245,9 @@ export function convert(
         const source = sources[expression.name];
 
         if (source !== undefined) {
+            if (source instanceof QueryableEmbedded) {
+                return new DirectExpression(source);
+            }
             return source;
         }
 
@@ -193,7 +268,7 @@ export function convert(
         throw new Error(`No identifier "${String(expression.name)}" found (on sources or global)`);
     }
 
-    function processExternal(expression: Expression<`ExternalExpression`>) {
+    function processExternal(expression: AstExpression<`ExternalExpression`>) {
         const path: string[] = [];
         walk(expression.expression, (exp) => {
             if (exp.type === `Property`) {
@@ -216,21 +291,36 @@ export function convert(
         return new VariableExpression(path.slice(1), args);
     }
 
-    function processCallExpression(expression: Expression<`CallExpression`>): QueryExpression {
-        const args = expression.arguments.map(process);
+    function processCallExpression(expression: AstExpression<`CallExpression`>): QueryExpression {
+        const callee = process(expression.callee);
+
+        if (callee instanceof DirectExpression) {
+            if (typeof callee.value !== `function`) {
+                throw new Error(`callee is not a function`);
+            }
+
+            // We always assume thet any direct expression stuff accepts all expressions to it's call
+            const result = callee.value(...expression.arguments, args);
+
+            if (result instanceof Expression) {
+                return result;
+            } else {
+                return new DirectExpression(result);
+            }
+        }
+
+        const callArgs = expression.arguments.map(process);
 
         if (expression.callee.type === `MemberExpression` && isGlobalIdentifier(expression.callee, globals)) {
-            const exp = mapGlobalIdentifier(expression.callee, globals!, args);
+            const exp = mapGlobalIdentifier(expression.callee, globals!, callArgs);
             if (exp === undefined) {
                 throw new Error(`Unable to map global expression`);
             }
             return exp;
         }
 
-        const callee = process(expression.callee);
-
         if (callee.type instanceof FunctionType === false) {
-            if (args.length !== 0) {
+            if (callArgs.length !== 0) {
                 throw new Error(`Received non function type as callee, but args were supplied`);
             }
             return callee;
@@ -239,11 +329,11 @@ export function convert(
         return new CallExpression(
             callee.type.returnType,
             callee,
-            new CallArguments(args),
+            new CallArguments(callArgs),
         );
     }
 
-    function processMemberExpression(expression: Expression<`MemberExpression`>): QueryExpression {
+    function processMemberExpression(expression: AstExpression<`MemberExpression`>): QueryExpression {
         if (isGlobalIdentifier(expression, globals)) {
             const exp = mapGlobalIdentifier(expression, globals!);
             if (exp === undefined) {
@@ -260,6 +350,15 @@ export function convert(
 
         if (typeof name === `symbol`) {
             throw new Error(`Unexpected symbol property name`);
+        }
+
+        if (source instanceof DirectExpression) {
+            if (source.value[name] instanceof Expression) {
+                return source.value[name];
+            }
+            return new DirectExpression(
+                source.value[name]
+            );
         }
 
         switch (true) {

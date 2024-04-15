@@ -2,29 +2,28 @@ import {
     BinaryExpression,
     LogicalExpression,
     MatchExpression,
+    Source,
     WhereExpression,
 } from '@type-linq/query-tree';
 import { convert } from '../convert/convert.js';
-import { Queryable } from './queryable.js';
-import { Func, Serializable } from '../type.js';
-import { parseFunction } from './parse.js';
+import { Expression as AstExpression, Serializable } from '../type.js';
 import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
-import { SchemaType } from '../schema-type.js';
+import { QueryProvider } from '../query-provider.js';
 
-export function where<TElement, TArgs extends Serializable | undefined = undefined>(
-    source: Queryable<TElement>,
-    predicate: Func<boolean, [SchemaType<TElement>, TArgs]>,
+export function where<TArgs extends Serializable | undefined = undefined>(
+    provider: QueryProvider,
+    source: Source,
+    predicateAst: AstExpression<`ArrowFunctionExpression`>,
     args?: TArgs,
 ) {
-    const ast = parseFunction(predicate, 1, args);
-    const vars = varsName(ast);
-    const sources = buildSources(ast, source.expression);
-    const globals: Globals = source.provider.globals;
+    const vars = varsName(predicateAst);
+    const sources = buildSources(predicateAst, source);
+    const globals: Globals = provider.globals;
 
     const clause = convert(
         sources,
-        ast.body,
+        predicateAst.body,
         vars,
         globals,
         args,
@@ -44,13 +43,10 @@ export function where<TElement, TArgs extends Serializable | undefined = undefin
     }
 
     const where = new WhereExpression(
-        source.expression,
+        source,
         clause,
     );
 
-    return new Queryable<TElement>(
-        source.provider,
-        where,
-    );
+    return where;
 }
 

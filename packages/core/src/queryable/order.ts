@@ -5,18 +5,18 @@ import {
     Expression,
 } from '@type-linq/query-tree';
 
-import { Serializable, Func, Expression as AstExpression } from '../type.js';
-import { Queryable } from './queryable.js';
-import { parseFunction } from './parse.js';
+import { Serializable, Expression as AstExpression } from '../type.js';
 import { processKey } from './util.js';
 import { Globals } from '../convert/global.js';
+import { QueryProvider } from '../query-provider.js';
 
-export function orderBy<TElement, TKey>(
-    source: Queryable<TElement>,
-    key: Func<TKey, [TElement]>,
+export function orderBy(
+    provider: QueryProvider,
+    source: Source,
+    keyAst: AstExpression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ): Source {
-    Walker.walkSource(source.expression, (exp) => {
+    Walker.walkSource(source, (exp) => {
         if (exp instanceof OrderExpression) {
             throw new Error(
                 `Expression already contains an orderBy. Use thenBy to add additional ordering`
@@ -24,15 +24,14 @@ export function orderBy<TElement, TKey>(
         }
     });
 
-    const keyAst = parseFunction(key, 1, args);
     const fields = processOrderKey(
         args,
-        source.provider.globals,
+        provider.globals,
         keyAst,
-        source.expression,
+        source,
     );
 
-    let current = source.expression;
+    let current = source;
     for (const field of  fields) {
         current = new OrderExpression(
             current,
@@ -43,12 +42,13 @@ export function orderBy<TElement, TKey>(
     return current;
 }
 
-export function orderByDescending<TElement, TKey>(
-    source: Queryable<TElement>,
-    key: Func<TKey, [TElement]>,
+export function orderByDescending(
+    provider: QueryProvider,
+    source: Source,
+    keyAst: AstExpression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ): Source {
-    Walker.walkSource(source.expression, (exp) => {
+    Walker.walkSource(source, (exp) => {
         if (exp instanceof OrderExpression) {
             throw new Error(
                 `Expression already contains an orderBy. Use thenBy to add additional ordering`
@@ -56,15 +56,14 @@ export function orderByDescending<TElement, TKey>(
         }
     });
 
-    const keyAst = parseFunction(key, 1, args);
     const fields = processOrderKey(
         args,
-        source.provider.globals,
+        provider.globals,
         keyAst,
-        source.expression,
+        source,
     );
 
-    let current = source.expression;
+    let current = source;
     for (const field of  fields) {
         current = new OrderExpression(
             current,
@@ -75,13 +74,14 @@ export function orderByDescending<TElement, TKey>(
     return current;
 }
 
-export function thenBy<TElement, TKey>(
-    source: Queryable<TElement>,
-    key: Func<TKey, [TElement]>,
+export function thenBy(
+    provider: QueryProvider,
+    source: Source,
+    keyAst: AstExpression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ): Source {
     let flag = false;
-    Walker.walkSource(source.expression, (exp) => {
+    Walker.walkSource(source, (exp) => {
         if (exp instanceof OrderExpression) {
             flag = true;
         }
@@ -93,15 +93,14 @@ export function thenBy<TElement, TKey>(
         );
     }
 
-    const keyAst = parseFunction(key, 1, args);
     const fields = processOrderKey(
         args,
-        source.provider.globals,
+        provider.globals,
         keyAst,
-        source.expression,
+        source,
     );
 
-    let current = source.expression;
+    let current = source;
     for (const field of  fields) {
         current = new OrderExpression(
             current,
@@ -112,13 +111,14 @@ export function thenBy<TElement, TKey>(
     return current;
 }
 
-export function thenByDescending<TElement, TKey>(
-    source: Queryable<TElement>,
-    key: Func<TKey, [TElement]>,
+export function thenByDescending(
+    provider: QueryProvider,
+    source: Source,
+    keyAst: AstExpression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ): Source {
     let flag = false;
-    Walker.walkSource(source.expression, (exp) => {
+    Walker.walkSource(source, (exp) => {
         if (exp instanceof OrderExpression) {
             flag = true;
         }
@@ -130,15 +130,14 @@ export function thenByDescending<TElement, TKey>(
         );
     }
 
-    const keyAst = parseFunction(key, 1, args);
     const fields = processOrderKey(
         args,
-        source.provider.globals,
+        provider.globals,
         keyAst,
-        source.expression,
+        source,
     );
 
-    let current = source.expression;
+    let current = source;
     for (const field of  fields) {
         current = new OrderExpression(
             current,

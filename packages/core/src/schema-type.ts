@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { BooleanType, DateType, NumberType, StringType, TYPE_IDENTIFIER } from '@type-linq/query-tree';
+import { Queryable } from './queryable/queryable.js';
 
 export type SchemaType<T> = T extends string
     ? string & StringType

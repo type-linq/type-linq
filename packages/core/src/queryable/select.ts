@@ -8,43 +8,36 @@ import {
 
 import { convert } from '../convert/convert.js';
 import { readName } from '../convert/util.js';
-import { Queryable } from './queryable.js';
 import {
     Expression as AstExpression,
     ExpressionTypeKey as AstExpressionTypeKey,
-    Func,
+    Expression,
     Serializable,
 } from '../type.js';
-import { parseFunction } from './parse.js';
 import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
-import { SchemaType, StandardType } from '../schema-type.js';
+import { QueryProvider } from '../query-provider.js';
 
 // TODO: Does this make sense in this file? Perhaps in a constants file?
 export const SCALAR_NAME = `__scalar__11cbd49f`;
 
 // TODO: Add the overload that accepts an integer index which allows for row_number
 
-export function select<TElement, TMapped>(
-    source: Queryable<TElement>,
-    map: Func<TMapped, [SchemaType<TElement>]>,
+export function select(
+    provider: QueryProvider,
+    source: Source,
+    ast: Expression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ) {
-    const ast = parseFunction(map, 1, args);
-
     const transformed = transformSelect(
-        [source.expression],
+        [source],
         ast,
-        source.provider.globals,
+        provider.globals,
         args,
     );
 
-    const result = transformSource(source.expression, transformed);
-
-    return new Queryable<StandardType<TMapped>>(
-        source.provider,
-        result,
-    );
+    const result = transformSource(source, transformed);
+    return result;
 }
 
 export function transformSource<TSource extends Source>(

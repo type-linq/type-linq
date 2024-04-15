@@ -1,11 +1,10 @@
-import { TransformExpression } from '@type-linq/query-tree';
-import { Queryable } from './queryable.js';
+import { Source, TransformExpression } from '@type-linq/query-tree';
 
 export function defaultIfEmpty<TElement>(
-    source: Queryable<TElement>,
+    source: Source,
     defaultValue: TElement,
 ) {
-    return new TransformExpression(source.expression, undefined, (results: unknown[]) => {
+    return new TransformExpression(source, undefined, (results: unknown[]) => {
         if (results.length === 0) {
             return [defaultValue];
         }
@@ -14,19 +13,19 @@ export function defaultIfEmpty<TElement>(
 }
 
 export function prepend<TElement>(
-    source: Queryable<TElement>,
+    source: Source,
     elements: TElement[],
 ) {
-    return new TransformExpression(source.expression, undefined, (results: unknown[]) => {
+    return new TransformExpression(source, undefined, (results: unknown[]) => {
         return [...elements, ...results];
     });
 }
 
 export function append<TElement>(
-    source: Queryable<TElement>,
+    source: Source,
     elements: TElement[],
 ) {
-    return new TransformExpression(source.expression, undefined, (results: unknown[]) => {
+    return new TransformExpression(source, undefined, (results: unknown[]) => {
         return [...results, ...elements];
     });
 }

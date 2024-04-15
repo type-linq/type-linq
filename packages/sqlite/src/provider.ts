@@ -27,7 +27,8 @@ import { identifier as numberIdentifier, accessor as numberAccessor } from './gl
 import { accessor as booleanAccessor } from './global/boolean.js';
 import { accessor as dateAccessor, identifier as dateIdentifier } from './global/date.js';
 import { log } from './log.js';
-import { postProcess } from './post-process.js';
+import { postProcess, unflatten } from './post-process.js';
+import { preProcess } from './pre-process.js';
 
 export class SqliteProvider extends QueryProvider {
     globals: Globals;
@@ -54,7 +55,9 @@ export class SqliteProvider extends QueryProvider {
     }
 
     async *execute<TResult>(source: Queryable<TResult>): AsyncGenerator<TResult> {
-        const expression = this.finalize(source.expression, true);
+        const finalized = this.finalize(source.expression);
+        const expression = preProcess(finalized);
+
         const { sql, variables, setTransforms, itemTransforms } = this.compile(expression);
 
         log.debug(`Executing SQL`);
@@ -72,12 +75,18 @@ export class SqliteProvider extends QueryProvider {
             results = transform(results) as TResult[];
         }
 
-        for (const result of results) {
-            let current = convert(result);
-            for (const transform of itemTransforms) {
-                current = transform(current);
+        results = results.map(
+            (result) => {
+                let current = convert(result);
+                for (const transform of itemTransforms) {
+                    current = transform(current);
+                }
+                return current;
             }
-            yield current as TResult;
+        );
+
+        for (const item of unflatten(results, finalized)) {
+            yield item as TResult;
         }
     }
 
