@@ -22,13 +22,14 @@ export function bindVars(expression: Expression<`ArrowFunctionExpression`>, coun
     // First normalize the expressions
     ensureIdentifierParams(expression);
 
-    const lastParam = expression.params.at(-1)!;
-    if (expression.params.length < count || lastParam.type !== `Identifier`) {
+    // TODO: This feels wrong... surely we want to make sure the vars param is there?
+
+    if (expression.params.length <= count) {
         // No vars param (which should have been added during normalization
         //  unless there were no args supplied) which means nothing to do.
         return;
     }
 
-    // Remove the vars param
+    // Remove the vars param... TODO: Why... we need it!
     expression.params.length = count;
 }

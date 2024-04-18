@@ -7,7 +7,6 @@ import {
 } from '@type-linq/query-tree';
 import { convert } from '../convert/convert.js';
 import { Expression as AstExpression, Serializable } from '../type.js';
-import { Globals } from '../convert/global.js';
 import { buildSources, varsName } from './util.js';
 import { QueryProvider } from '../query-provider.js';
 
@@ -19,13 +18,12 @@ export function where<TArgs extends Serializable | undefined = undefined>(
 ) {
     const vars = varsName(predicateAst);
     const sources = buildSources(predicateAst, source);
-    const globals: Globals = provider.globals;
 
     const clause = convert(
         sources,
         predicateAst.body,
+        provider,
         vars,
-        globals,
         args,
     );
 

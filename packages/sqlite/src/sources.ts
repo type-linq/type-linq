@@ -18,8 +18,9 @@ import {
     EntityType,
 } from '@type-linq/query-tree';
 
-import { DatabaseSchema, TableColumns, TableSchema } from './schema.js';
+import { DatabaseSchema, TableSchema } from './schema.js';
 import { randString } from './util.js';
+import { LateBound } from '@type-linq/query-tree/dist/src/util.js';
 
 export function buildSources(schema: DatabaseSchema) {
     const sources: Record<string, EntitySource> = {};
@@ -32,10 +33,11 @@ export function buildSources(schema: DatabaseSchema) {
     // TODO: Views!
 
     const linkTables: TableSchema[] = [];
-
     for (const [name, table] of Object.entries(schema.tables)) {
         // TODO: Determine link tables....
     }
+
+    // TODO: We are missing reverse links...
 
     for (const [name, table] of Object.entries(schema.tables)) {
         const linkTable = linkTables.find((table) => table.name === table.name);
@@ -58,49 +60,28 @@ export function buildSources(schema: DatabaseSchema) {
             );
         }
 
-        for (const [linkName, { table: tableName, columns }] of Object.entries(table.links)) {
+        for (const [linkName, link] of Object.entries(table.links)) {
             const boundaryId = randString();
 
-            // TODO: For one to many relationships we need entity sets!
-            // TODO: We need to be able to identifier many to many relationships and setup LinkedEntitys accordingly....
-
-            // One to many relationships should be represented by searching for all links pointing to this table
-            //  OR where the columns pointing to the table are not primary key of said table
-
-            const source = () => sources[table.name];
-            const linked: () => LinkedEntity = () => new LinkedEntity(
-                () => sources[table.name],
-                () => new Boundary(sources[tableName], boundaryId),
-                () => clause!,
-            );
-
-            const clause = Object.entries(columns).reduce<WhereClause | undefined>((result, [sourceName, joinedName]) => {
-                const sourceType = () => sources[table.name].type[sourceName] as Type;
-                const linkedType = () => sources[tableName].type[sourceName] as Type;
-
-                const left = new FieldIdentifier(source, sourceName, sourceType);
-                const right = new FieldIdentifier(linked, joinedName, linkedType);
-                const comparison = new BinaryExpression(left, `==`, right);
-
-                if (result === undefined) {
-                    return comparison;
-                }
-
-                return new LogicalExpression(result, `&&`, comparison);
-            }, undefined);
-
-            const linkedSource = new LinkedEntity(
-                source,
-                () => new Boundary(sources[tableName], boundaryId),
-                clause || new BinaryExpression(new Literal(1), `==`, new Literal(1)),
+            const linked = buildLink(
+                boundaryId,
+                sources,
+                table.name,
+                link.table,
+                link.columns,
+                link.many,
             );
 
             fields.push(
                 new Field(
-                    linkedSource,
+                    linked,
                     linkName,
                 )
             );
+
+            // TODO: We don't have a good way to define the name on the remote linked....
+            // TODO: The remote table may not exist yet....
+            // TODO: Think we need to add this to the schema....
         }
 
         const fieldSet = new FieldSet(fields);
@@ -135,4 +116,63 @@ function createType(dbType: string) {
         default:
             throw new Error(`Unknown db type "${dbType}" received`);
     }
+}
+
+function buildLink(
+    boundaryId: string,
+    sources: Record<string, EntitySource>,
+    tableName: string,
+    linkTableName: string,
+    columns: Record<string, string>,
+    many?: boolean,
+) {
+    const source = () => sources[tableName];
+    const linked: () => LinkedEntity = () => new LinkedEntity(
+        () => new Boundary(sources[linkTableName], boundaryId),
+        () => sources[tableName],
+        () => clause!,
+    );
+
+    const clause = buildLinkClause(
+        source,
+        linked,
+        sources,
+        tableName,
+        linkTableName,
+        columns,
+    );
+
+    const linkedSource = new LinkedEntity(
+        () => new Boundary(sources[linkTableName], boundaryId),
+        source,
+        clause,
+        many,
+    );
+
+    return linkedSource;
+}
+
+function buildLinkClause(
+    source: LateBound<EntitySource>,
+    linked: LateBound<EntitySource>,
+    sources: Record<string, EntitySource>,
+    tableName: string,
+    linkTableName: string,
+    columns: Record<string, string>,
+) {
+    const clause = Object.entries(columns).reduce<WhereClause | undefined>((result, [sourceName, joinedName]) => {
+        const sourceType = () => sources[tableName].type[sourceName] as Type;
+        const linkedType = () => sources[linkTableName].type[joinedName] as Type;
+
+        const left = new FieldIdentifier(source, sourceName, sourceType);
+        const right = new FieldIdentifier(linked, joinedName, linkedType);
+        const comparison = new BinaryExpression(left, `==`, right);
+
+        if (result === undefined) {
+            return comparison;
+        }
+
+        return new LogicalExpression(result, `&&`, comparison);
+    }, undefined);
+    return clause ?? new BinaryExpression(new Literal(1), `==`, new Literal(1));
 }

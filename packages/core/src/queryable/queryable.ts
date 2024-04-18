@@ -1,18 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Literal, Source, VariableExpression } from '@type-linq/query-tree';
+import { Source } from '@type-linq/query-tree';
 import { QueryProvider } from '../query-provider.js';
 import { select } from './select.js';
 import { where } from './where.js';
 import { join } from './join.js';
-import { Expression, ExpressionType, ExpressionTypeKey, Func, Serializable } from '../type.js';
+import { Expression as AstExpression, ExpressionTypeKey, Func, Serializable } from '../type.js';
 import { SchemaType, StandardType } from '../schema-type.js';
 import { orderBy, orderByDescending, thenBy, thenByDescending } from './order.js';
 import { distinct } from './distinct.js';
 import { groupBy } from './group.js';
 import { first, firstOrDefault, single, singleOrDefault, skip, take } from './range.js';
 import { append, defaultIfEmpty, prepend } from './transform.js';
-import { parseFunction } from './parse.js';
+import { parseFunction, prepare } from './parse.js';
 import { convert } from '../convert/convert.js';
+import { sum } from './math.js';
 
 export type GroupResult<TElement, TMapped, TResult> =
     TResult extends undefined
@@ -23,6 +24,7 @@ export type GroupResult<TElement, TMapped, TResult> =
 
 // TODO: Add SchemaType and StandardType where missing
 // TODO: We need an EmbeddedQueryable type which will be used inside the expressions....
+// TODO: Max and min need to have functions to select the columns
 
 export class Queryable<TElement> {
     readonly provider: QueryProvider;
@@ -119,7 +121,7 @@ export class Queryable<TElement> {
         return new Queryable<TElement>(
             this.provider,
             expression,
-        );      
+        );
     }
 
     thenBy<TKey>(
@@ -173,9 +175,9 @@ export class Queryable<TElement> {
     >(
         key: Func<TKey, [SchemaType<TElement>]>,
         element?: Func<TMapped, [SchemaType<TElement>]>,
-        result?: Func<TResult, [TKey, Queryable<TMapped extends undefined ? SchemaType<TElement> : TMapped>]>,
+        result?: Func<TResult, [TKey, EmbeddedQueryable<TMapped extends undefined ? SchemaType<TElement> : TMapped>]>,
         args?: Serializable,
-    ): GroupResult<TElement, TMapped, TResult>  {   
+    ): GroupResult<TElement, TMapped, TResult> {
         const keyAst = parseFunction(key, 1, args);
         const elementAst = element && parseFunction(element, 1, args);
         const resultAst = result && parseFunction(result, 2, args);
@@ -217,26 +219,14 @@ export class Queryable<TElement> {
         for await (const result of query) {
             return result;
         }
-
         return null;
     }
 
     async single() {
         const limited = single(this.expression);
         const query = new Queryable<TElement>(this.provider, limited);
-        let result: TElement | undefined = undefined;
-        for await (const item of query) {
-            if (result !== undefined) {
-                throw new Error(`Sequence contains multiple results`);
-            }
-            result = item;
-        }
-
-        if (result === undefined) {
-            throw new Error(`Sequence contains no results`);
-        }
-
-        return result as TElement;
+        const result = await singleItem(query);
+        return result;
     }
 
     async singleOrDefault() {
@@ -273,12 +263,20 @@ export class Queryable<TElement> {
         return new Queryable<TElement>(this.provider, expression);
     }
 
-    // TODO: Max and min need to have functions to select the columns
-}
+    async sum(field: Func<number, [SchemaType<TElement>]>, args?: Serializable) {
+        const fieldAst = parseFunction(field, 1, args);
+        const expression = sum(
+            this.provider,
+            this.expression,
+            fieldAst,
+            args,
+        );
 
-// TODO: This isn't quite right... this can ONLY accept expressions (Except for args)...
-//  never anything else...
-// so numbers for take and skip are out....
+        const query = new Queryable<number>(this.provider, expression);
+        const result = await singleItem(query);
+        return result;
+    }
+}
 
 export class QueryableEmbedded {
     readonly provider: QueryProvider;
@@ -290,26 +288,36 @@ export class QueryableEmbedded {
     }
 
     select(
-        map: Expression<`ArrowFunctionExpression`>,
+        map: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (map.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected map to be a function`);
+        }
+
+        const preparedMap = prepare(map, 1, args);
         const result = select(
             this.provider,
             this.expression,
-            map,
+            preparedMap,
             args,
         );
         return new QueryableEmbedded(this.provider, result);
     }
 
     where(
-        predicate: Expression<`ArrowFunctionExpression`>,
+        predicate: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (predicate.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected predicate to be a function`);
+        }
+
+        const preparedPredicate = prepare(predicate, 1, args);
         const expression = where(
             this.provider,
             this.expression,
-            predicate,
+            preparedPredicate,
             args,
         );
         return new QueryableEmbedded(this.provider, expression);
@@ -317,70 +325,106 @@ export class QueryableEmbedded {
 
     join(
         inner: Source,
-        outerKey: Expression<`ArrowFunctionExpression`>,
-        innerKey: Expression<`ArrowFunctionExpression`>,
-        result: Expression<`ArrowFunctionExpression`>,
+        outerKey: AstExpression<`ArrowFunctionExpression`>,
+        innerKey: AstExpression<`ArrowFunctionExpression`>,
+        result: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (outerKey.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected outerKey to be a function`);
+        }
+
+        if (innerKey.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected innerKey to be a function`);
+        }
+
+        if (result.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected result to be a function`);
+        }
+
+        const preparedOuterKey = prepare(outerKey, 1, args);
+        const preparedInnerKey = prepare(innerKey, 1, args);
+        const preparedResult = prepare(result, 2, args);
+
         const expression = join(
             this.provider,
             this.expression,
             inner,
-            outerKey,
-            innerKey,
-            result,
+            preparedOuterKey,
+            preparedInnerKey,
+            preparedResult,
             args,
         );
         return new QueryableEmbedded(this.provider, expression);
     }
 
     orderBy(
-        key: Expression<`ArrowFunctionExpression`>,
+        key: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (key.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected key to be a function`);
+        }
+
+        const preparedKey = prepare(key, 1, args);
         const expression = orderBy(
             this.provider,
             this.expression,
-            key,
+            preparedKey,
             args
         );
         return new QueryableEmbedded(this.provider, expression);
     }
 
     orderByDescending(
-        key: Expression<`ArrowFunctionExpression`>,
+        key: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (key.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected key to be a function`);
+        }
+
+        const preparedKey = prepare(key, 1, args);
         const expression = orderByDescending(
             this.provider,
             this.expression,
-            key,
+            preparedKey,
             args
         );
         return new QueryableEmbedded(this.provider, expression);
     }
 
     thenBy(
-        key: Expression<`ArrowFunctionExpression`>,
+        key: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (key.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected key to be a function`);
+        }
+
+        const preparedKey = prepare(key, 1, args);
         const expression = thenBy(
             this.provider,
             this.expression,
-            key,
+            preparedKey,
             args
         );
         return new QueryableEmbedded(this.provider, expression);
     }
 
     thenByDescending(
-        key: Expression<`ArrowFunctionExpression`>,
+        key: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (key.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected key to be a function`);
+        }
+
+        const preparedKey = prepare(key, 1, args);
         const expression = thenByDescending(
             this.provider,
             this.expression,
-            key,
+            preparedKey,
             args
         );
         return new QueryableEmbedded(this.provider, expression);
@@ -392,48 +436,67 @@ export class QueryableEmbedded {
     }
 
     groupBy(
-        key: Expression<`ArrowFunctionExpression`>,
-        element?: Expression<`ArrowFunctionExpression`>,
-        result?: Expression<`ArrowFunctionExpression`>,
+        key: AstExpression<`ArrowFunctionExpression`>,
+        element?: AstExpression<`ArrowFunctionExpression`>,
+        result?: AstExpression<`ArrowFunctionExpression`>,
         args?: Serializable,
     ) {
+        if (key.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected key to be a function`);
+        }
+
+        if (element && element.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected element to be a function`);
+        }
+
+        if (result && result.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected result to be a function`);
+        }
+
+        const preparedKey = prepare(key, 1, args);
+        const preparedElement = element && prepare(element, 1, args);
+        const preparedResult = result && prepare(result, 2, args);
+
         const expression = groupBy(
             this.provider,
             this.expression,
-            key,
-            element,
-            result,
+            preparedKey,
+            preparedElement,
+            preparedResult,
             args,
         );
         return new QueryableEmbedded(this.provider, expression);
     }
 
-    skip(expression: Expression<ExpressionTypeKey>, args?: Serializable) {
-        // TODO: Need to convert this expression in isolation....
-        //  It shoudn't be referencing an entity, so we should be OK to convert without context
+    skip(
+        expression: AstExpression<ExpressionTypeKey>,
+        args?: Serializable,
+    ) {
         const converted = convert(
             {},
             expression,
+            this.provider,
             undefined,
-            this.provider.globals,
             args,
         );
 
-        // TODO: Skip and take expressions are wroing...
-
-        switch (true) {
-            case converted instanceof Literal:
-                throw new Error(`not implemented`);
-            case converted instanceof VariableExpression:
-                throw new Error(`not implemented`);
-        }
-
-        const exp = skip(this.expression, count);
+        const exp = skip(this.expression, converted);
         return new QueryableEmbedded(this.provider, exp);
     }
 
-    take(expression: Expression<ExpressionTypeKey>) {
-        const exp = take(this.expression, count);
+    take(
+        expression: AstExpression<ExpressionTypeKey>,
+        args?: Serializable,
+    ) {
+        const converted = convert(
+            {},
+            expression,
+            this.provider,
+            undefined,
+            args,
+        );
+
+        const exp = take(this.expression, converted);
         return new QueryableEmbedded(this.provider, exp);
     }
 
@@ -447,10 +510,28 @@ export class QueryableEmbedded {
         return new QueryableEmbedded(this.provider, limited);
     }
 
+    sum(
+        field: AstExpression<`ArrowFunctionExpression`>,
+        args?: Serializable,
+    ) {
+        if (field.type !== `ArrowFunctionExpression`) {
+            throw new Error(`Expected field to be a function`);
+        }
+
+        const preparedField = prepare(field, 1, args);
+
+        const expression = sum(
+            this.provider,
+            this.expression,
+            preparedField,
+            args,
+        );
+        return new QueryableEmbedded(this.provider, expression);
+    }
+
     defaultIfEmpty() {
         throw new Error(`"defaultIfEmpty" is not supported in a sub expression`);
     }
-
 
     first() {
         throw new Error(`"first" is not supported in a sub expression. Consider using "firstOrDefault" instead`);
@@ -467,4 +548,86 @@ export class QueryableEmbedded {
     append() {
         throw new Error(`"append" is not supported in a sub expression`);
     }
+}
+
+export type NoArgsParam<T extends unknown[]> = T extends [...infer TParams, Serializable?]
+    ? [...TParams]
+    : T;
+
+export type NoArgs<T> = {
+    [K in keyof T]: T[K] extends (...args: infer TArgs) => T
+    ? (...params: NoArgsParam<TArgs>) => T
+    : T[K];
+}
+
+export type EmbeddedQueryable<TElement> = {
+    readonly provider: QueryProvider;
+    readonly expression: Source;
+
+    select<TMapped>(
+        map: Func<TMapped, [SchemaType<TElement>]>,
+    ): Queryable<TMapped>;
+
+    where<TArgs extends Serializable | undefined = undefined>(
+        predicate: Func<boolean, [SchemaType<TElement>, TArgs]>,
+    ): Queryable<TElement>;
+
+    join<TInner, TKey, TResult>(
+        inner: Queryable<TInner>,
+        outerKey: Func<TKey, [SchemaType<TElement>]>,
+        innerKey: Func<TKey, [SchemaType<TInner>]>,
+        result: Func<TResult, [SchemaType<TElement>, SchemaType<TInner>]>,
+    ): Queryable<StandardType<TResult>>;
+
+    orderBy<TKey>(
+        key: Func<TKey, [SchemaType<TElement>]>,
+    ): Queryable<TElement>;
+
+    orderByDescending<TKey>(
+        key: Func<TKey, [SchemaType<TElement>]>,
+    ): Queryable<TElement>;
+
+    thenBy<TKey>(
+        key: Func<TKey, [SchemaType<TElement>]>,
+    ): Queryable<TElement>;
+
+    thenByDescending<TKey>(
+        key: Func<TKey, [SchemaType<TElement>]>,
+    ): Queryable<TElement>;
+
+    distinct(): Queryable<TElement>;
+
+    groupBy<TKey, TMapped = undefined, TResult = undefined>(
+        key: Func<TKey, [SchemaType<TElement>]>,
+        element?: Func<TMapped, [SchemaType<TElement>]>,
+        result?: Func<TResult, [TKey, Queryable<TMapped extends undefined ? SchemaType<TElement> : TMapped>]>,
+        args?: Serializable,
+    ): GroupResult<TElement, TMapped, TResult>;
+
+    skip(count: number): Queryable<TElement>;
+    take(count: number): Queryable<TElement>;
+
+    firstOrDefault(): TElement;
+    singleOrDefault(): TElement;
+
+    sum(
+        field: Func<number, [SchemaType<TElement>]>
+    ): number;
+
+}
+
+async function singleItem<TElement>(query: Queryable<TElement>) {
+    let result: TElement | undefined = undefined;
+    for await (const item of query) {
+        if (result !== undefined) {
+            throw new Error(`Sequence contains multiple results`);
+        }
+        result = item;
+    }
+
+    if (result === undefined) {
+        throw new Error(`Sequence contains no results`);
+    }
+
+    return result;
 }

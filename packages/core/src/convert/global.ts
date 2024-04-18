@@ -11,6 +11,7 @@ export type Globals = {
     hasIdentifier(basePath: string): boolean;
     mapIdentifier(path: string[], args?: QueryExpression[]): QueryExpression | undefined;
     mapAccessor(type: Type, object: QueryExpression, name: string | symbol, args: QueryExpression[]): QueryExpression | undefined;
+    mapHandler(handler: string, args?: QueryExpression[]): QueryExpression | undefined;
 };
 
 export function mapGlobalIdentifier(expression: Expression<`MemberExpression` | `Identifier`>, globals: Globals, args?: QueryExpression[]): QueryExpression {

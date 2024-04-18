@@ -86,8 +86,20 @@ function *processRows(rows: any[], source: Source, parent?: string) {
         }
 
         // Create the object
-        yield createObject(rows.slice(start, index + 1), source, parent);
+        yield createRowValue(rows.slice(start, index + 1), source, parent);
     }
+}
+
+function createRowValue(rows: any[], expression: Source, parent?: string) {
+    if (rows.length === 0) {
+        return undefined;
+    }
+
+    if (rows[0] && typeof rows[0] === `object`) {
+        return createObject(rows, expression, parent);
+    }
+
+    return rows[0];
 }
 
 function createObject(rows: any[], expression: Source, parent?: string) {
@@ -164,6 +176,10 @@ function createBaseObject(row: any, expression: Source, parent?: string) {
 }
 
 function rowMatches(row1: any, row2: any, expression: Source, parent?: string) {
+    if (row1 === row2) {
+        return true;
+    }
+
     if (row2 === undefined) {
         return false;
     }

@@ -1,4 +1,5 @@
 import {
+    EntitySource,
     Field,
     FieldSet,
     SelectExpression,
@@ -14,8 +15,7 @@ import {
     Expression,
     Serializable,
 } from '../type.js';
-import { Globals } from '../convert/global.js';
-import { buildSources, varsName } from './util.js';
+import { ExpressionSource, buildSources, varsName } from './util.js';
 import { QueryProvider } from '../query-provider.js';
 
 // TODO: Does this make sense in this file? Perhaps in a constants file?
@@ -32,7 +32,7 @@ export function select(
     const transformed = transformSelect(
         [source],
         ast,
-        provider.globals,
+        provider,
         args,
     );
 
@@ -44,7 +44,15 @@ export function transformSource<TSource extends Source>(
     source: TSource,
     fields: FieldSet,
 ) {
+    if (source instanceof EntitySource) {
+        return new SelectExpression(
+            fields,
+            false,
+        );
+    }
+
     // Now swap out the base of the branch
+    // TODO: This isn't quite right... we don't want to go lower than an entitysource....
     const result = Walker.mapSource(source, (exp) => {
         if (exp.source) {
             return exp;
@@ -58,14 +66,14 @@ export function transformSource<TSource extends Source>(
                 false
             );
         return result;
-    });
+    }, undefined, (exp) => exp instanceof EntitySource);
     return result as TSource;
 }
 
 export function transformSelect(
-    sources: Source[],
+    sources: ExpressionSource[],
     expression: AstExpression<`ArrowFunctionExpression`>,
-    globals?: Globals,
+    provider: QueryProvider,
     args?: Serializable,
 ): FieldSet {
     const vars = varsName(expression);
@@ -123,8 +131,8 @@ export function transformSelect(
         const converted = convert(
             sourceMap,
             expression,
+            provider,
             vars,
-            globals,
             args,
             { convertLogical: true },
         );

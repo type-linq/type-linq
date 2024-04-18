@@ -1,8 +1,9 @@
-import { Field, FieldSet, GroupExpression, SelectExpression, Source, Walker } from '@type-linq/query-tree';
+import { FieldSet, GroupExpression, SelectExpression, Source, Walker } from '@type-linq/query-tree';
 import { Expression as AstExpression, Serializable } from '../type.js';
 import { processKey } from './util.js';
 import { transformSelect, transformSource } from './select.js';
 import { QueryProvider } from '../query-provider.js';
+import { QueryableEmbedded } from './queryable.js';
 
 
 export function groupBy(
@@ -21,7 +22,7 @@ export function groupBy(
 
     const fields = processKey(
         args,
-        provider.globals,
+        provider,
         keyAst,
         source,
     );
@@ -40,7 +41,7 @@ export function groupBy(
         const fieldSet = transformSelect(
             [groupBy],
             elementAst,
-            provider.globals,
+            provider,
             args,
         );
 
@@ -57,20 +58,38 @@ export function groupBy(
             throw new Error(`Invalid program`);
         }
 
-        return transformSource(elementSource, new FieldSet(
-            [
-                new Field(keySelect, `key`),
-                new Field(elementSource, `group`)
-            ]
-        ));
+        const fieldSet = transformSelect(
+            [keySelect, new QueryableEmbedded(provider, elementSource)],
+            elementAst!,
+            provider,
+            args,
+        );
+        return transformSource(elementSource, fieldSet);
     }
 
+    // TODO: This is wrong... it's not just a select transform,
+    //  we need to ingest the source (there may be things like where)
+    // But how... we need the final result of the second parameter
+    //  then we need to ingest whatever happens there....
+
+    // TODO: This could happen on a standard field as well...
+    //  Think... Supplier.Products.where((c) => ...)
+    //  That means the select transform has to be able to handle it....
+    //     which means we need some access to the source during the transform
+    //      to apply the values... 
+
+    // But... we actually don't want this to happen automatically...
+    //  We if we have a field defined, but some subsequent select discarss that
+    //  field, we don't want th sub query parts (in the same way we do linked entities)
+    //  THis means the transform select needs to get the entire field value, and we need to
+    //      process it in the compile step...
+
     const fieldSet = transformSelect(
-        [keySelect, elementSource ?? groupBy],
+        [keySelect, new QueryableEmbedded(provider, elementSource ?? groupBy)],
         resultAst,
-        provider.globals,
+        provider,
         args,
     );
 
-    return transformSource(elementSource || groupBy, fieldSet);
+    return transformSource(elementSource ?? groupBy, fieldSet);
 }

@@ -13,19 +13,44 @@ export function preProcess(source: Source) {
         );
     }
 
-    const explodeEntity = (field: Field) => {
-        if (field.expression instanceof EntitySource === false) {
+    const explodeEntity = (field: Field, parent?: string) => {
+        if (field.expression instanceof Source === false) {
             return field;
         }
 
-        return field.expression.fieldSet.scalars().fields.map(
-            (scalarField) => processExplodedField(field.name.name, scalarField)
-        );
+        const parentName = parent ?
+            `${parent}.${field.name.name}` :
+            field.name.name;
+
+        if (field.expression instanceof EntitySource) {
+            return field.expression.fieldSet.scalars().fields.map(
+                (scalarField) => processExplodedField(parentName, scalarField)
+            );
+        }
+
+        return field.expression.fieldSet.fields.map(
+            (subField): Field | Field[] => {
+                if (subField.expression instanceof Source) {
+                    return explodeEntity(subField, parentName);
+                } else if ((field.expression as Source).fieldSet.scalar) {
+                    return explodeEntity(
+                        new Field(
+                            subField.expression,
+                            field.name.name,
+                        ),
+                        parent,
+                    );
+                } else {
+                    return processExplodedField(parentName, subField);
+                }
+            }
+        ).flat();
     }
 
-    const fields = source.fieldSet.fields.map(explodeEntity).flat();
-
-    // Now swap out the base of the branch
+    const fields = source.fieldSet.fields
+        .map((field) => explodeEntity(field))
+        .flat();
+    
     const finalResult = Walker.mapSource(source, (exp) => {
         if (exp instanceof SelectExpression === false) {
             return exp;

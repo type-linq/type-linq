@@ -66,7 +66,11 @@ function unwrap(expression: Expression<`Program`>): Expression<`ArrowFunctionExp
     } as Expression<`ArrowFunctionExpression`>;
 }
 
-function prepare(expression: Expression<`ArrowFunctionExpression`>, count: number, args?: unknown) {
+export function prepare(
+    expression: Expression<`ArrowFunctionExpression`>,
+    count: number,
+    args?: unknown
+): Expression<`ArrowFunctionExpression`> {
     bindVars(expression, count, args);
 
     // TODO: This needs to be controlled via configuration

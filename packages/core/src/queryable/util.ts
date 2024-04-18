@@ -3,9 +3,12 @@ import { readName } from '../convert/util.js';
 import { Expression as AstExpression, ExpressionTypeKey, Serializable } from '../type.js';
 import { SCALAR_NAME } from './select.js';
 import { convert } from '../convert/convert.js';
-import { Globals } from '../convert/global.js';
+import { QueryableEmbedded } from './queryable.js';
+import { QueryProvider } from '../query-provider.js';
 
-export function buildSources(ast: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]) {
+export type ExpressionSource = Expression | QueryableEmbedded;
+
+export function buildSources(ast: AstExpression<`ArrowFunctionExpression`>, ...sources: ExpressionSource[]) {
     return sources.reduce(
         (result, source, index) => {
             const name = ast.params.length > index ?
@@ -19,7 +22,7 @@ export function buildSources(ast: AstExpression<`ArrowFunctionExpression`>, ...s
             result[name] = source;
             return result;
         },
-        { } as Record<string, Expression>
+        { } as Record<string, ExpressionSource>
     );
 }
 
@@ -46,9 +49,9 @@ export function asArray<T>(value: T | T[]): T[] {
 
 export function processKey(
     args: Serializable | undefined,
-    globals: Globals | undefined,
+    provider: QueryProvider,
     expression: AstExpression<`ArrowFunctionExpression`>,
-    ...sources: Expression[]
+    ...sources: ExpressionSource[]
 ): Field[] | Field {
     const sourceMap = buildSources(expression, ...sources);
     const vars = varsName(expression);
@@ -56,7 +59,7 @@ export function processKey(
     switch (expression.body.type) {
         case `ArrayExpression`:
             return expression.body.elements.map(
-                (element, index) => processKeyValue(args, globals, element, String(index), vars, sourceMap)
+                (element, index) => processKeyValue(args, provider, element, String(index), vars, sourceMap)
             );
         case `ObjectExpression`:
             return expression.body.properties.map(
@@ -65,7 +68,7 @@ export function processKey(
                         throw new Error(`Expected ObjectExpression.properties to all be "Property" Expressions`);
                     }
                     const name = readName(property.key) as string;
-                    return processKeyValue(args, globals, property.value, name, vars, sourceMap);
+                    return processKeyValue(args, provider, property.value, name, vars, sourceMap);
                 }
             );
         default: {
@@ -81,18 +84,18 @@ export function processKey(
                     name = SCALAR_NAME;
                     break;
             }
-            return processKeyValue(args, globals, expression.body, name, vars, sourceMap);
+            return processKeyValue(args, provider, expression.body, name, vars, sourceMap);
         }
     }
 }
 
 function processKeyValue(
     args: Serializable | undefined,
-    globals: Globals | undefined,
+    provider: QueryProvider,
     expression: AstExpression<ExpressionTypeKey>,
     name: string,
     varsName: string | undefined,
-    sources: Record<string, Expression>,
+    sources: Record<string, ExpressionSource>,
 ) {
     switch (expression.type) {
         case `Identifier`:
@@ -108,10 +111,11 @@ function processKeyValue(
     const converted = convert(
         sources,
         expression,
+        provider,
         varsName,
-        globals,
         args,
     );
 
-    return new Field(converted, name);
+    const field = new Field(converted, name);
+    return field.subSource();
 }

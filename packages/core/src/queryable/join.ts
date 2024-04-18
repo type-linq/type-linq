@@ -17,7 +17,6 @@ import {
 
 import { randString } from '../convert/util.js';
 import { Expression as AstExpression, Serializable } from '../type.js';
-import { Globals } from '../convert/global.js';
 import { transformSelect } from './select.js';
 import { processKey } from './util.js';
 import { QueryProvider } from '../query-provider.js';
@@ -35,15 +34,13 @@ export function join(
     resultAst: AstExpression<`ArrowFunctionExpression`>,
     args?: Serializable,
 ): Source {
-    const globals: Globals = provider.globals;
-
-    const outerColumns = processKey(args, globals, outerAst, outerExpression);
+    const outerColumns = processKey(args, provider, outerAst, outerExpression);
     const joinExpression = ingest(innerExpression);
 
     const fieldSet = transformSelect(
         [outerExpression, joinExpression.joined],
         resultAst,
-        provider.globals,
+        provider,
         args,
     );
 
@@ -64,7 +61,7 @@ export function join(
         const boundaryId = randString();
         if (canIngest(expression) === false) {
             const subSource = new SubSource(expression);
-            const innerKey = processKey(args, globals, innerAst, expression);
+            const innerKey = processKey(args, provider, innerAst, expression);
 
             const convertField = (field: Field) => new Field(
                 new FieldIdentifier(
@@ -109,7 +106,7 @@ export function join(
             return new SelectExpression(boundedFields, exp instanceof SelectExpression ? exp.distinct : false);
         });
 
-        const innerColumns = processKey(args, globals, innerAst, bounded);
+        const innerColumns = processKey(args, provider, innerAst, bounded);
         const condition = createJoinClause(outerColumns, innerColumns, boundaryId);
 
         // When we can ingest it means all we will have left is an EntitySource

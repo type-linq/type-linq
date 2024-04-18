@@ -18,6 +18,9 @@ import {
     UnknownType,
     EntityType,
     UnionType,
+    GlobalIdentifier,
+    CallExpression,
+    CallArguments,
 } from '@type-linq/query-tree';
 import { compile } from './compile.js';
 import { DatabaseSchema } from './schema.js';
@@ -47,6 +50,7 @@ export class SqliteProvider extends QueryProvider {
         this.globals = {
             mapAccessor: this.#mapAccessor,
             mapIdentifier: this.#mapIdentifier,
+            mapHandler: this.#mapHandler,
             hasIdentifier: this.#hasIdentifier,
         };
 
@@ -85,7 +89,7 @@ export class SqliteProvider extends QueryProvider {
             }
         );
 
-        for (const item of unflatten(results, finalized)) {
+        for (const item of results) {
             yield item as TResult;
         }
     }
@@ -140,6 +144,22 @@ export class SqliteProvider extends QueryProvider {
                 return true;
             default:
                 return false;
+        }
+    }
+
+    #mapHandler = (handler: string, args?: Expression[]): Expression | undefined => {
+        switch (handler) {
+            case `sum`:
+                return new CallExpression(
+                    new NumberType(),
+                    new GlobalIdentifier(
+                        `sum`,
+                        new FunctionType(new NumberType())
+                    ),
+                    new CallArguments(args ?? []),
+                );
+            default:
+                return undefined;
         }
     }
 

@@ -63,6 +63,7 @@ const schema: DatabaseSchema = {
             links: {
                 Supplier: {
                     table: `Suppliers`,
+                    many: false,
                     columns: {
                         SupplierID: `SupplierID`,
                     }
@@ -89,6 +90,7 @@ const schema: DatabaseSchema = {
             links: {
                 Products: {
                     table: `Products`,
+                    many: true,
                     columns: {
                         SupplierID: `SupplierID`,
                     }
@@ -337,18 +339,65 @@ class SuppliersQueryable extends SqliteQueryableSource<Supplier> {
     //         supplier: c.Supplier,
     //     }));
 
-    const query15 = products
-        .groupBy(
-            (c) => c.Supplier.Region,
-            undefined,
-            (c, d) => ({
-                region: c,
-                stock: d.sum((c) => c.UnitsInStock!)
-            })
-        );
+    // const sum = await products.sum((c) => c.UnitsInStock!);
+    // console.log(`Sum`, sum);
+
+    // TODO: SURELY WE HAVE TO HAVE A SUB QUERY IF WE HAVE ANYTHING OTHER THAN A SELECT!
+
+    const query16 = suppliers
+        // .where((s) => s.SupplierID === 1)
+        .select((s) => ({
+            supplier: s.CompanyName,
+            availableProducts: s.Products
+                .where((p) => p.UnitsInStock! > 0)
+                .select((p) => ({
+                    id: p.ProductID,
+                    name: p.ProductName,
+                })),
+            readilyAvailableProducts: s.Products
+                // .where((p) => p.UnitsInStock! > 0)
+                // .where((p) => p.ReorderLevel! > 0)
+                .select((p) => p.ProductName),
+        }));
 
 
-    for await (const product of query15) {
+    
+
+    /*
+        Expecting:
+        select
+            [Suppliers].[CompanyName] AS [supplier],
+            [Products].[ProductName] as [availableProducts],
+            [Products_1].[ProductName] as [readilyAvailableProducts]
+        from Suppliers
+        join Products
+            on ...
+        join Products as [Products_1]
+            on ...
+        where [Products].[UnitsInStock] > 0
+            and [Products_1].[UnitsInStock] > 0
+            and [Products_1].[ReorderLevel] > 0
+    */
+
+    // const query17 = products
+    //     .groupBy(
+    //         (c) => c.Supplier.Region,
+    //         undefined,
+    //         (c, d) => ({
+    //             region: c,
+    //             stock: d
+    //                 // TODO: This where isn't ariving in the query?
+    //                 .where(c => c.UnitsInStock! > 10)
+    //                 // TODO: At this point the field source for UnitsInStock
+    //                 //  is the SelectExpression... We need to convert this to
+    //                 //  SubSource if we have a complex expression....
+    //                 //  BUT... surely we don't want to do that on a root expression?
+    //                 .sum((c) => c.UnitsInStock!)
+    //         })
+    //     );
+
+
+    for await (const product of query16) {
         console.dir(product);
     }
 

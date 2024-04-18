@@ -26,8 +26,8 @@ export abstract class EntitySource extends Source {
     /** Creates a linked entity source with a boundary */
     link(source: EntitySource, clause: WhereClause, identifier = randString()): LinkedEntity {
         return new LinkedEntity(
-            this,
             new Boundary(source, identifier),
+            this,
             clause,
         );
     }
@@ -155,6 +155,9 @@ export class Boundary<TSource extends EntitySource = EntitySource> extends Entit
     }
 
     rebuild(expression: EntitySource): Boundary<EntitySource> {
+        if (expression instanceof EntitySource === false) {
+            throw new Error(`Boundary MUST be rebuilt with an EntitySource`);
+        }
         return new Boundary(expression, this.identifier);
     }
 
@@ -217,11 +220,11 @@ export class LinkedEntity extends EntitySource {
 
             return new FieldIdentifier(
                 new LinkedEntity(
-                    this.linked,
                     new Boundary(
                         exp.entity,
                         boundaryId
                     ),
+                    this.linked,
                     this.clause,
                 ),
                 exp.name,
@@ -233,8 +236,9 @@ export class LinkedEntity extends EntitySource {
     }
 
     constructor(
-        linked: LateBound<EntitySource>,
+        // TODO: Source has to be first!
         source: LateBound<BoundedEntitySource>,
+        linked: LateBound<EntitySource>,
         clause: LateBound<WhereClause>,
         set?: boolean,
     ) {
@@ -266,19 +270,24 @@ export class LinkedEntity extends EntitySource {
     }
 
     rebuild(
-        linked: EntitySource | undefined,
         source: BoundedEntitySource | undefined,
+        linked: EntitySource | undefined,
         clause: WhereClause | undefined,
     ): Expression {
         return new LinkedEntity(
-            linked ?? this.linked,
             source ?? this.source,
+            linked ?? this.linked,
             clause ?? this.clause,
             this.set,
         );
     }
 
-    *walk() {  }
+    *walk() {
+        // TODO: Test this!
+        yield this.source;
+        yield this.linked;
+        yield this.clause;
+    }
 }
 
 export class SubSource extends Entity {

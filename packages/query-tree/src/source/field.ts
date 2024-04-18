@@ -2,7 +2,14 @@ import { Expression } from '../expression.js';
 import { FieldIdentifier, Identifier } from '../identifier.js';
 import { EntityType, Type, isEqual, isScalar } from '../type.js';
 import { Walker } from '../walk.js';
-import { Boundary } from './entity.js';
+import { Boundary, EntitySource, SubSource } from './entity.js';
+import { GroupExpression } from './group.js';
+import { JoinExpression } from './join.js';
+import { OrderExpression } from './order.js';
+import { SkipExpression, TakeExpression } from './range.js';
+import { SelectExpression } from './select.js';
+import { Source } from './source.js';
+import { WhereExpression } from './where.js';
 
 export class Field extends Expression {
     readonly name: Identifier;
@@ -53,6 +60,58 @@ export class Field extends Expression {
                 exp.type,
             );
         }) as Field;
+    }
+
+    subSource() {
+        if (this.expression instanceof Source === false) {
+            return this;
+        }
+
+        switch (true) {
+            case this.expression instanceof EntitySource:
+            case this.expression instanceof SelectExpression:
+                return this;
+            default:
+                break;
+        }
+
+        return new Field(
+            new SubSource(this.expression),
+            this.name.name,
+        );
+    }
+
+    ingest(source: Source) {
+        if (this.expression instanceof Source === false) {
+            return;
+        }
+
+        const ignore = (exp: Expression) => exp instanceof GroupExpression &&
+            exp instanceof TakeExpression &&
+            exp instanceof SkipExpression &&
+            exp instanceof OrderExpression;
+
+        const expression = Walker.mapSource(this.expression, (exp) => {
+            switch (true) {
+                case exp instanceof EntitySource:
+                case exp instanceof SelectExpression:
+                    return exp;
+                case exp instanceof WhereExpression:
+                    throw new Error(`not implemented`);
+                case exp instanceof JoinExpression:
+                    throw new Error(`not implemented`);
+                default:
+                    throw new Error(
+                        `Unexpected expression type "${exp.constructor.name}" received`
+                    );
+            }
+        }, undefined, ignore);
+
+        if (ignore(expression)) {
+            // TODO: Sub source.... but... we need to share the same sub source between different fields!!!!!
+            //  Perhaps FieldSet is the place?
+            throw new Error(`not implemented`);
+        }
     }
 }
 

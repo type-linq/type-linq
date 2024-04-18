@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { BooleanType, DateType, NumberType, StringType, TYPE_IDENTIFIER } from '@type-linq/query-tree';
-import { Queryable } from './queryable/queryable.js';
+import { EmbeddedQueryable} from './queryable/queryable.js';
 
-export type SchemaType<T> = T extends string
+export type SchemaType<T> =
+    T extends (infer TArrayElement)[]
+    ? EmbeddedQueryable<SchemaType<TArrayElement>>
+    : T extends string
     ? string & StringType
     : T extends number
     ? number & NumberType
@@ -12,11 +15,12 @@ export type SchemaType<T> = T extends string
     ? Date & DateType
     : T extends object
     ? { [K in keyof T]: SchemaType<T[K]> }
-    : T extends [infer TFirst, ...infer TRest]
-    ? [SchemaType<TFirst>, ...SchemaType<TRest>]
     : T;
 
-export type StandardType<T> = T extends { [TYPE_IDENTIFIER]: `string` }
+export type StandardType<T> =
+    T extends EmbeddedQueryable<infer TArrayElement>
+    ? StandardType<TArrayElement>[]
+    : T extends { [TYPE_IDENTIFIER]: `string` }
     ? string
     : T extends { [TYPE_IDENTIFIER]: `number` }
     ? number

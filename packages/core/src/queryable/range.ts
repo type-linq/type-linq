@@ -1,8 +1,8 @@
-import { SkipExpression, Source, TakeExpression } from '@type-linq/query-tree';
+import { Expression, SkipExpression, Source, TakeExpression } from '@type-linq/query-tree';
 
 export function skip(
     source: Source,
-    count: number,
+    count: number | Expression,
 ): Source {
     const expression = new SkipExpression(source, count);
     return expression;
@@ -10,7 +10,7 @@ export function skip(
 
 export function take(
     source: Source,
-    count: number,
+    count: number | Expression,
 ): Source {
     const expression = new TakeExpression(source, count);
     return expression;

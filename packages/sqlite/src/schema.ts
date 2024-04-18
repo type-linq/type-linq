@@ -15,9 +15,8 @@ export type TableColumns = {
 
 export type TableLink = {
     table: string;
-    columns: {
-        [name: string]: string;
-    }
+    columns: Record<string, string>;
+    many?: boolean;
 };
 
 export type TableLinks = {
@@ -118,6 +117,8 @@ export async function fetchSchema(file: string) {
 
     async function tableLinks(name: string) {
         const links = await exec(`select * from pragma_foreign_key_list('${name}')`);
+
+        // TODO: We need reverse links....
 
         const grouped = links.reduce<Record<string, TableLink>>((result, link) => {
             result[link.id] = result[link.id] || {

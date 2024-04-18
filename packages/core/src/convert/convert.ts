@@ -20,13 +20,17 @@ import {
     Type,
     UnknownType,
     Walker,
+    LinkedEntity,
 } from '@type-linq/query-tree';
 import { readName } from './util.js';
 import { Expression as AstExpression, ExpressionTypeKey, Operator, Serializable } from '../type.js';
 import { walk } from '../walk.js';
-import { Globals, isGlobalIdentifier, mapGlobalIdentifier, mapGlobalAccessor } from './global.js';
+import { isGlobalIdentifier, mapGlobalIdentifier, mapGlobalAccessor } from './global.js';
 import { QueryableEmbedded } from '../queryable/queryable.js';
-export type Sources = Record<string | symbol, QueryExpression>;
+import { ExpressionSource } from '../queryable/util.js';
+import { QueryProvider } from '../query-provider.js';
+
+export type Sources = Record<string | symbol, ExpressionSource>;
 
 export type ConvertOptions = {
     /** Whether to convert LogicalExpressions to BinaryExpressions */
@@ -35,7 +39,7 @@ export type ConvertOptions = {
 
 // We need to make sure that we never return one of these... we always need to make sure
 //  it's a Queryable, and then return the Queryable expression.....
-class DirectExpression<TValue> extends Expression {
+class EmbeddedQueryExpression<TValue> extends Expression {
     readonly type: Type = new UnknownType();
     readonly value: TValue;
 
@@ -49,7 +53,7 @@ class DirectExpression<TValue> extends Expression {
             return true;
         }
 
-        if (expression instanceof DirectExpression === false) {
+        if (expression instanceof EmbeddedQueryExpression === false) {
             return false;
         }
 
@@ -66,24 +70,27 @@ class DirectExpression<TValue> extends Expression {
 export function convert(
     sources: Sources,
     expression: AstExpression<ExpressionTypeKey>,
+    provider: QueryProvider,
     varsName?: string | symbol,
-    globals?: Globals,
     args?: Serializable,
     options?: ConvertOptions,
 ): QueryExpression {
-    // TODO: We're still missing arrow functions...
-    //  we need to handle the args to the Queryable calls,
-    //  and those contain functions////
+    // TODO: Wrape embeddedentity expressions as subsources if necessary!s
 
     const exp = process(expression);
     const result = Walker.map(exp, (exp) => {
-        if (exp instanceof DirectExpression === false) {
+        if (exp instanceof EmbeddedQueryExpression === false) {
             return exp;
         }
 
         if (exp.value instanceof QueryableEmbedded === false) {
-            throw new Error(`Exprected remaining Direct expressions to only contain Queryables directly`);
+            throw new Error(`Exprected any remaining DirectExpressions to only contain Queryables directly`);
         }
+
+        // TODO: Here.....we need the correct type!
+        // We are getting the type returned by the select expression... but we actually
+        //  need an EntitySet....
+        //      Or maybe we just need to handle it differently in compile?
 
         return exp.value.expression;
     });
@@ -92,26 +99,6 @@ export function convert(
 
     function process(expression: AstExpression<ExpressionTypeKey>): QueryExpression {
         switch (expression.type) {
-            case `ArrowFunctionExpression`: {
-                // TODO: How to build the sources...
-                // TODO: How to get the vars name....
-                //  We need to process the AST first....
-                //  TODO: ... no... the call we made should have processed the AST....
-                //      What we do need to do is bind the args if we have them.....
-
-                // TODO: We may need to pass a QueryableEmbedded in here...
-
-                return convert(
-                    subSources,
-                    expression.body,
-                    subVarsName,
-                    globals,
-                    options,
-                );
-
-                // TODO: Required for queryable calls....
-                throw new Error(`not implemented`);
-            }
             case `ExternalExpression`:
                 return processExternal(expression);
             case `Identifier`:
@@ -246,13 +233,13 @@ export function convert(
 
         if (source !== undefined) {
             if (source instanceof QueryableEmbedded) {
-                return new DirectExpression(source);
+                return new EmbeddedQueryExpression(source);
             }
             return source;
         }
 
-        if (isGlobalIdentifier(expression, globals)) {
-            const exp = mapGlobalIdentifier(expression, globals!);
+        if (isGlobalIdentifier(expression, provider.globals)) {
+            const exp = mapGlobalIdentifier(expression, provider.globals);
             if (exp === undefined) {
                 throw new Error(`Unable to map global expression`);
             }
@@ -294,7 +281,7 @@ export function convert(
     function processCallExpression(expression: AstExpression<`CallExpression`>): QueryExpression {
         const callee = process(expression.callee);
 
-        if (callee instanceof DirectExpression) {
+        if (callee instanceof EmbeddedQueryExpression) {
             if (typeof callee.value !== `function`) {
                 throw new Error(`callee is not a function`);
             }
@@ -305,14 +292,14 @@ export function convert(
             if (result instanceof Expression) {
                 return result;
             } else {
-                return new DirectExpression(result);
+                return new EmbeddedQueryExpression(result);
             }
         }
 
         const callArgs = expression.arguments.map(process);
 
-        if (expression.callee.type === `MemberExpression` && isGlobalIdentifier(expression.callee, globals)) {
-            const exp = mapGlobalIdentifier(expression.callee, globals!, callArgs);
+        if (expression.callee.type === `MemberExpression` && isGlobalIdentifier(expression.callee, provider.globals)) {
+            const exp = mapGlobalIdentifier(expression.callee, provider.globals, callArgs);
             if (exp === undefined) {
                 throw new Error(`Unable to map global expression`);
             }
@@ -334,8 +321,8 @@ export function convert(
     }
 
     function processMemberExpression(expression: AstExpression<`MemberExpression`>): QueryExpression {
-        if (isGlobalIdentifier(expression, globals)) {
-            const exp = mapGlobalIdentifier(expression, globals!);
+        if (isGlobalIdentifier(expression, provider.globals)) {
+            const exp = mapGlobalIdentifier(expression, provider.globals);
             if (exp === undefined) {
                 throw new Error(`Unable to map global expression`);
             }
@@ -352,11 +339,18 @@ export function convert(
             throw new Error(`Unexpected symbol property name`);
         }
 
-        if (source instanceof DirectExpression) {
+        if (source instanceof EmbeddedQueryExpression) {
             if (source.value[name] instanceof Expression) {
                 return source.value[name];
             }
-            return new DirectExpression(
+
+            if (typeof source.value[name] === `function`) {
+                return new EmbeddedQueryExpression(
+                    (...args: unknown[]) => source.value[name](...args)
+                );
+            }
+
+            return new EmbeddedQueryExpression(
                 source.value[name]
             );
         }
@@ -374,7 +368,7 @@ export function convert(
                     return result;
                 }
 
-                const exp = mapGlobalAccessor(source, name, [], globals);
+                const exp = mapGlobalAccessor(source, name, [], provider.globals);
                 if (exp === undefined) {
                     throw new Error(`Unable to map MemberExpression to global`);
                 }
@@ -389,7 +383,7 @@ export function convert(
             case source instanceof Source: {
                 if (source.type instanceof EntityType === false) {
                     const field = source.fieldSet.field;
-                    const exp = mapGlobalAccessor(field, name, [], globals);
+                    const exp = mapGlobalAccessor(field, name, [], provider.globals);
                     if (exp === undefined) {
                         throw new Error(`Unable to map MemberExpression to global (Trying to map "${name}" to "${field.type.constructor.name}")`);
                     }
@@ -408,7 +402,7 @@ export function convert(
                 // Any time the source is a call expression we are going to
                 //  be mapping onto a global accessor since we can never return
                 //  an entity type from calls (or can we?)
-                const exp = mapGlobalAccessor(source, name, [], globals);
+                const exp = mapGlobalAccessor(source, name, [], provider.globals);
                 if (exp === undefined) {
                     throw new Error(`Unable to map MemberExpression to global`);
                 }
@@ -434,9 +428,16 @@ export function convert(
                 return processAccess(source.expression, name);
             case source instanceof Source: {
                 const field = source.fieldSet.find(name);
+
                 if (field === undefined) {
                     throw new Error(`Unable to find identifier "${name}" on source`);
                 }
+
+                if (field.expression instanceof LinkedEntity && field.expression.set) {
+                    const embedded = new QueryableEmbedded(provider, field.expression);
+                    return new EmbeddedQueryExpression(embedded);
+                }
+
                 return field.expression;
             }
             case source instanceof FieldIdentifier: {

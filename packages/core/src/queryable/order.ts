@@ -2,12 +2,10 @@ import {
     OrderExpression,
     Source,
     Walker,
-    Expression,
 } from '@type-linq/query-tree';
 
 import { Serializable, Expression as AstExpression } from '../type.js';
-import { processKey } from './util.js';
-import { Globals } from '../convert/global.js';
+import { ExpressionSource, processKey } from './util.js';
 import { QueryProvider } from '../query-provider.js';
 
 export function orderBy(
@@ -26,7 +24,7 @@ export function orderBy(
 
     const fields = processOrderKey(
         args,
-        provider.globals,
+        provider,
         keyAst,
         source,
     );
@@ -58,7 +56,7 @@ export function orderByDescending(
 
     const fields = processOrderKey(
         args,
-        provider.globals,
+        provider,
         keyAst,
         source,
     );
@@ -95,7 +93,7 @@ export function thenBy(
 
     const fields = processOrderKey(
         args,
-        provider.globals,
+        provider,
         keyAst,
         source,
     );
@@ -132,7 +130,7 @@ export function thenByDescending(
 
     const fields = processOrderKey(
         args,
-        provider.globals,
+        provider,
         keyAst,
         source,
     );
@@ -148,8 +146,8 @@ export function thenByDescending(
     return current;
 }
 
-function processOrderKey(args: Serializable, globals: Globals, expression: AstExpression<`ArrowFunctionExpression`>, ...sources: Expression[]) {
-    const key = processKey(args, globals, expression, ...sources);
+function processOrderKey(args: Serializable, provider: QueryProvider, expression: AstExpression<`ArrowFunctionExpression`>, ...sources: ExpressionSource[]) {
+    const key = processKey(args, provider, expression, ...sources);
     if (Array.isArray(key)) {
         return key;
     }

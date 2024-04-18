@@ -146,14 +146,21 @@ export function compile(expression: Source): SqlInfo {
         parts.push(info.fmt`ORDER BY\n\t${orders.map((ord) => ord.sql).join(`,\n`)}`)        
     }
 
-    if (takeExpression) {
-        parts.push(`LIMIT ${takeExpression.count}`);
+    const take = takeExpression ?
+        compileExpression(takeExpression.count, info) :
+        undefined;
+    if (take) {
+        parts.push(`LIMIT ${take.sql}`);
     }
-    if (skipExpression) {
-        if (!takeExpression) {
+
+    const skip = skipExpression ?
+        compileExpression(skipExpression.count, info) :
+        undefined;
+    if (skip) {
+        if (!take) {
             parts.push(`LIMIT -1`);
         }
-        parts.push(`OFFSET ${skipExpression.count}`);
+        parts.push(`OFFSET ${skip.sql}`);
     }
 
     return {
@@ -166,6 +173,8 @@ export function compile(expression: Source): SqlInfo {
             ...(group ? group.variables : []),
             ...(having ? having.variables : []),
             ...orders.map((ord) => ord.variables).flat(),
+            ...(take ? take.variables : []),
+            ...(skip ? skip.variables : []),
         ],
         setTransforms: transforms
             .filter((tfm) => tfm.set)
@@ -242,13 +251,7 @@ function extractQueryComponents(expression: Source) {
 
         if (exp instanceof SkipExpression) {
             if (skipExpression) {
-                skipExpression = new SkipExpression(
-                    exp.source,
-                    Math.max(
-                        skipExpression.count,
-                        exp.count,
-                    )
-                );
+                throw new Error(`Cannot have multiple SkipExpressions`);
             } else {
                 skipExpression = exp;
             }
@@ -257,13 +260,7 @@ function extractQueryComponents(expression: Source) {
 
         if (exp instanceof TakeExpression) {
             if (takeExpression) {
-                takeExpression = new TakeExpression(
-                    exp.source,
-                    Math.min(
-                        takeExpression.count,
-                        exp.count,
-                    )
-                );
+                throw new Error(`Cannot have multiple TakeExpressions`);
             } else {
                 takeExpression = exp;
             }
@@ -324,6 +321,8 @@ function compileExpression(expression: Expression, info: CompileInfo): SqlFragme
             }
 
             // TODO: Does this make sense? THink about it and put a comment why...
+            // TODO: This is definitely wrong.. we ar losing context....
+            //  But surely we should have exploded this?
             const root = expression.root();
             return compileExpression(root, info);
         }

@@ -1,11 +1,12 @@
 import { Expression } from '../expression.js';
+import { Literal } from '../literal.js';
 import { Source } from './source.js';
 
 // TODO: These are wrong... 
 //  The counts need to be able to accept expressions... (e.g. vars....)
 
 export class SkipExpression extends Source {
-    readonly count: number;
+    readonly count: Expression;
 
     get source() {
         return super.source!;
@@ -15,9 +16,14 @@ export class SkipExpression extends Source {
         return this.source.fieldSet;
     }
 
-    constructor(source: Source, count: number) {
+    constructor(source: Source, count: Expression | number) {
         super(source);
-        this.count = count;
+
+        if (typeof count === `number`) {
+            this.count = new Literal(count);
+        } else {
+            this.count = count;
+        }
     }
 
     isEqual(expression?: Expression | undefined): boolean {
@@ -33,8 +39,11 @@ export class SkipExpression extends Source {
             this.count === expression.count;
     }
 
-    rebuild(source: Source): Expression {
-        return new SkipExpression(source, this.count);
+    rebuild(source: Source | undefined, count: Expression | undefined): SkipExpression {
+        return new SkipExpression(
+            source ?? this.source,
+            count ?? this.count,
+        );
     }
 
     *walk() {
@@ -43,7 +52,7 @@ export class SkipExpression extends Source {
 }
 
 export class TakeExpression extends Source {
-    readonly count: number;
+    readonly count: Expression;
 
     get source() {
         return super.source!;
@@ -53,9 +62,14 @@ export class TakeExpression extends Source {
         return this.source.fieldSet;
     }
 
-    constructor(source: Source, count: number) {
+    constructor(source: Source, count: Expression | number) {
         super(source);
-        this.count = count;
+
+        if (typeof count === `number`) {
+            this.count = new Literal(count);
+        } else {
+            this.count = count;
+        }
     }
 
     isEqual(expression?: Expression | undefined): boolean {
@@ -71,8 +85,11 @@ export class TakeExpression extends Source {
             this.count === expression.count;
     }
 
-    rebuild(source: Source): Expression {
-        return new TakeExpression(source, this.count);
+    rebuild(source: Source | undefined, count: Expression | undefined): TakeExpression {
+        return new TakeExpression(
+            source ?? this.source,
+            count ?? this.count,
+        );
     }
 
     *walk() {
